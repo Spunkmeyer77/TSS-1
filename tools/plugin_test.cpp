@@ -100,15 +100,32 @@ int main (int argc, char** argv)
     run ((int) (sr * 1.0 / block));
     check (rms() > 0.02, "preview of slot 6 plays");
 
-    // ---- every voice preset
+    // ---- every voice preset: speaks, and sounds different from the others
+    std::vector<std::pair<double, double>> prints;   // (pitch, brightness) per preset
     for (int v = 0; v < kNumVoices; ++v)
     {
+        {
+            VoiceSettings vs; const auto& pr = kVoicePresets[v];
+            vs.voice = v; vs.speed = 140; vs.pitch = 40; vs.range = 30; vs.gap = 5; vs.amplitude = 100;   // same settings: only the voice differs
+            auto c = EspeakService::get().render ("Hello human, systems online", vs);
+            double zc = 0; const float* d = c->audio.getReadPointer (0);
+            for (int i = 1; i < c->numSamples(); ++i) if ((d[i] >= 0) != (d[i - 1] >= 0)) zc += 1;
+            prints.push_back ({ c->f0, zc / c->numSamples() * 22050.0 });
+            std::printf ("      %-18s %-11s %-10s f0 %6.1f Hz  brightness %6.0f\n", pr.name, pr.language, pr.variant, c->f0, prints.back().second);
+        }
         proc.loadVoicePreset (v);
         const bool ok = waitFor ([&] { return proc.getSlotStatus (0) == TSS1Processor::SlotStatus::ready; }, 10000);
         auto m = note (36);
         run ((int) (sr * 2.8 / block), &m, v % 4 == 0 ? &demo : nullptr);
         check (ok && rms() > 0.01 && finite() && peak() <= 1.0f,
                juce::String ("voice ") + kVoicePresets[v].name + " (rms " + juce::String (rms(), 3) + ", peak " + juce::String (peak(), 2) + ")");
+    }
+    {
+        int similar = 0;
+        for (size_t a = 0; a < prints.size(); ++a)
+            for (size_t b = a + 1; b < prints.size(); ++b)
+                if (std::abs (prints[a].first - prints[b].first) < 1.0 && std::abs (prints[a].second - prints[b].second) < 15.0) ++similar;
+        check (similar == 0, "all 26 voices sound different (" + juce::String (similar) + " near-identical pairs)");
     }
     proc.loadVoicePreset (kDefaultVoice);
 

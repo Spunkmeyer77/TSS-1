@@ -28,7 +28,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TSS1Processor::createLayout(
     l.add (std::make_unique<AudioParameterChoice> (ParameterID ("voice", 1), "Voice", voiceNames, kDefaultVoice));
     l.add (std::make_unique<AudioParameterInt> (ParameterID ("speed", 1), "Speed", 80, 300, d.speed, AudioParameterIntAttributes().withLabel ("wpm")));
     l.add (std::make_unique<AudioParameterInt> (ParameterID ("pitch", 1), "Pitch", 0, 99, d.pitch));
-    l.add (std::make_unique<AudioParameterInt> (ParameterID ("range", 1), "Range", 0, 99, 50));
+    l.add (std::make_unique<AudioParameterInt> (ParameterID ("range", 1), "Range", 0, 99, d.range));
     l.add (std::make_unique<AudioParameterInt> (ParameterID ("gap", 1), "Word Gap", 0, 30, d.gap, AudioParameterIntAttributes().withLabel ("x10 ms")));
     l.add (std::make_unique<AudioParameterInt> (ParameterID ("amp", 1), "Voice Volume", 10, 200, d.amplitude));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID ("mode", 1), "Mode", StringArray { "Trigger", "Melodic", "Syllable" }, 0));
@@ -38,10 +38,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TSS1Processor::createLayout(
     l.add (std::make_unique<AudioParameterBool> (ParameterID ("gate", 1), "Gate", false));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID ("sync", 1), "Sync", StringArray { "Off", "1/4", "1/8", "1/16", "1/8T", "1/16T" }, 0));
     l.add (std::make_unique<AudioParameterBool> (ParameterID ("fx", 1), "FX", true));
-    l.add (std::make_unique<AudioParameterFloat> (ParameterID ("intensity", 1), "FX Amount", NormalisableRange<float> (0.5f, 2.0f, 0.01f), 1.0f));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID ("intensity", 1), "FX Amount", NormalisableRange<float> (0.5f, 2.0f, 0.01f), d.amount));
     l.add (std::make_unique<AudioParameterBool> (ParameterID ("filter", 1), "Filter", true));
-    l.add (std::make_unique<AudioParameterFloat> (ParameterID ("harmonic", 1), "Harmonic Boost", NormalisableRange<float> (1.0f, 2.0f, 0.01f), 1.2f));
-    l.add (std::make_unique<AudioParameterFloat> (ParameterID ("crush", 1), "Crush", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.0f));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID ("harmonic", 1), "Harmonic Boost", NormalisableRange<float> (1.0f, 2.0f, 0.01f), d.harmonic));
+    l.add (std::make_unique<AudioParameterFloat> (ParameterID ("crush", 1), "Crush", NormalisableRange<float> (0.0f, 1.0f, 0.01f), d.crush));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID ("level", 1), "Level", NormalisableRange<float> (-24.0f, 6.0f, 0.1f), 0.0f,
                AudioParameterFloatAttributes().withLabel ("dB")));
     return l;
@@ -146,6 +146,12 @@ void TSS1Processor::loadVoicePreset (int index)
     set ("pitch", (float) p.pitch);
     set ("gap", (float) p.gap);
     set ("amp", (float) p.amplitude);
+    set ("range", (float) p.range);
+    set ("intensity", p.amount);
+    set ("harmonic", p.harmonic);
+    set ("crush", p.crush);
+    set ("filter", p.filter ? 1.0f : 0.0f);
+    set ("fx", 1.0f);
 }
 
 TSS1Processor::SlotStatus TSS1Processor::getSlotStatus (int slot) const

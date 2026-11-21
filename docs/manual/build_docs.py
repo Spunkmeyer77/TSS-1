@@ -27,7 +27,7 @@ def presets():
         m = re.match(r"\s*//\s*(.+)", line)
         if m and "{" not in line and m.group(1).strip().lower() in ("retro computing", "cinematic ai", "modern and technical", "character"):
             group = m.group(1).strip().upper()
-        m = re.match(r'\s*\{\s*"(\w+)",\s*"([^"]+)",\s*"([^"]+)",\s*"(\w+)",\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\}', line)
+        m = re.match(r'\s*\{\s*"(\w+)",\s*"([^"]+)",\s*"([^"]+)",\s*"(\w+)",\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)f,\s*([\d.]+)f,\s*([\d.]+)f,\s*(\w+)\s*\}', line)
         if m:
             rows.append((group,) + m.groups())
     return rows
@@ -68,6 +68,7 @@ th { text-align: left; background: #e3dac3; padding: 1.4mm 2mm; font-size: 8.5pt
 td { padding: 1.1mm 2mm; border-bottom: .3mm solid #e3dac3; vertical-align: top; }
 td.c, th.c { text-align: center; }
 tr.g td { background: #06180c; color: #7dffa0; font-family: Menlo, Consolas, monospace; font-weight: 700; font-size: 8.5pt; letter-spacing: 1px; }
+table.tight { font-size: 8pt; } table.tight td { padding: .55mm 1.4mm; white-space: nowrap; } table.tight th { padding: 1mm 1.4mm; font-size: 7.5pt; }
 .note { background: #fff4d6; border-left: 1.5mm solid #e0a92e; padding: 2.5mm 3.5mm; border-radius: 1mm; margin: 2mm 0; }
 .tip { background: #e6f7ea; border-left: 1.5mm solid #3fcf6c; padding: 2.5mm 3.5mm; border-radius: 1mm; margin: 2mm 0; }
 .callouts { counter-reset: c; columns: 2; column-gap: 6mm; padding-left: 0; list-style: none; }
@@ -164,7 +165,7 @@ so the 20 slots cover C1 to G2. Change the root on the screen (<span class="k">K
 <div class="row"><img class="shot half" src="{img('screen.jpg')}"><div class="half">
 <p>Everything shown in brackets or bright green can be clicked or dragged.</p>
 <ul><li><span class="k">VOICE</span> click the name for the list of 26 presets; <span class="k">[&lt;]</span> <span class="k">[&gt;]</span> step through them.
-Choosing a preset sets SPEED, PITCH, GAP and VOL to its values.</li>
+Choosing a preset loads its whole character: the voice, SPEED, PITCH, RANGE, GAP, VOL and the effects (AMOUNT, HARMONIC, CRUSH, FILTER).</li>
 <li><span class="k">MODE</span> click to step through TRIGGER, MELODIC and SYLLABLE. On the right: the keys used (drag to move the root).</li>
 <li><span class="k">PLAY</span> MONO (a new note cuts the one playing) or POLY (phrases overlap, up to 8);
 ONE-SHOT (phrases always play to the end) or GATE (they stop when you release the key);
@@ -278,12 +279,16 @@ blind people who use eSpeak every day as their screen reader voice. Fast, clear 
 to them than sounding human, which is exactly the sound TSS-1 is about.</li></ul>
 <h4>The voice variants</h4>
 <p>eSpeak NG has one base voice per language and a set of <b>variants</b> that reshape it: different formant frequencies
-(a larger or smaller "vocal tract"), base pitch, roughness, breathiness and tone. TSS-1 uses the English base voice, its
-Received Pronunciation version (BRITISH ANDROID) and the male (m1 - m4) and female (f1 - f4) variants. The Klatt
-synthesiser is included in the build too; Dennis Klatt's name runs through the whole history of computer speech (next chapter).</p>
+(a larger or smaller "vocal tract"), base pitch, roughness, breathiness and tone. TSS-1 uses the British, American and Received Pronunciation English voices and a different variant for every preset:
+the six <b>klatt</b> variants switch to eSpeak's second synthesiser, built on the classic design of Dennis Klatt, whose name
+runs through the whole history of computer speech (next chapter); the <b>robosoft</b> and <b>UniRobot</b> variants are
+robot voices with metallic echoes; there is a public-address <b>announcer</b>, a pitchless <b>whisper</b>, a rough
+<b>croak</b> and aged <b>grandpa</b>, plus plain male and female voices. These variants were made by eSpeak contributors,
+many of them screen-reader users tuning voices they listen to all day.</p>
 <h4>The presets</h4>
-<p>The 26 presets were designed for <b>DJZ-Speak</b>, an open-source robotic speech tool by MushroomFleet. Each one is a
-recipe: a variant plus speed, pitch, volume and word gap chosen to suggest a famous kind of machine voice. They are
+<p>The 26 presets were designed for <b>DJZ-Speak</b>, an open-source robotic speech tool by MushroomFleet. TSS-1 keeps
+their speed, pitch, volume and word gap and gives every preset its own eSpeak variant, intonation range and effects
+setting, so that each one is a clearly different machine. They are
 impressions made with eSpeak, not copies of the original products or recordings.</p>""")
 
     ch("THE ANCESTORS BEHIND THE PRESETS", """
@@ -308,21 +313,27 @@ alerts and countdowns) and character voices that use the female, child-like and 
 <p>All of these names belong to their owners; TSS-1 is not affiliated with or endorsed by any of them.</p>""")
 
     rows = presets()
-    body = "<table><tr><th>Preset</th><th>eSpeak voice</th><th class='c'>Speed</th><th class='c'>Pitch</th><th class='c'>Volume</th><th class='c'>Gap</th></tr>"
+    body = ("<table class='tight'><tr><th>Preset</th><th>eSpeak voice</th><th class='c'>Speed</th><th class='c'>Pitch</th><th class='c'>Range</th>"
+            "<th class='c'>Vol</th><th class='c'>Gap</th><th class='c'>Amount</th><th class='c'>Harm.</th><th class='c'>Crush</th><th class='c'>Filter</th></tr>")
     last = None
-    for g, _id, name, lang, var, sp, pi, am, gp in rows:
+    for g, _id, name, lang, var, sp, pi, am, gp, rg, amt, hm, cr, fl in rows:
         if g != last:
-            body += f"<tr class='g'><td colspan='6'>{g}</td></tr>"
+            body += f"<tr class='g'><td colspan='11'>{g}</td></tr>"
             last = g
-        body += f"<tr><td><b>{name}</b></td><td>{lang} + {var}</td><td class='c'>{sp}</td><td class='c'>{pi}</td><td class='c'>{am}</td><td class='c'>{gp}</td></tr>"
-    body += "</table><p>The voice settings of the presets come from DJZ-Speak. Variants m1 - m4 are male voices, f1 - f4 female; BRITISH ANDROID uses Received Pronunciation English.</p>"
+        body += (f"<tr><td><b>{name}</b></td><td>{lang} + {var}</td><td class='c'>{sp}</td><td class='c'>{pi}</td><td class='c'>{rg}</td>"
+                 f"<td class='c'>{am}</td><td class='c'>{gp}</td><td class='c'>{amt}</td><td class='c'>{hm}</td><td class='c'>{cr}</td>"
+                 f"<td class='c'>{'on' if fl == 'true' else 'off'}</td></tr>")
+    body += ("</table><p>Every preset uses its own eSpeak variant: <b>klatt</b> voices run on the Klatt synthesiser, "
+             "<b>robosoft</b> and <b>UniRobot</b> are robot voices with metallic echo, <b>announcer</b> is a public-address voice, "
+             "<b>whisper</b> has no pitched tone at all, <b>croak</b> and <b>grandpa</b> are rough and aged, m and f are the plain male and female "
+             "voices. Speed, pitch, volume and gap come from DJZ-Speak.</p>")
     ch("VOICE PRESETS", body)
 
     ch("AUTOMATION AND MIDI", """
 <p>All of these can be automated in your DAW and MIDI-mapped (Ableton Live: Configure the plug-in, or map its parameters):
 Voice, Speed, Pitch, Range, Word Gap, Voice Volume, Mode, Root Note, Voices (mono/poly), Gate, Sync, FX, FX Amount, Filter,
 Harmonic Boost, Crush and Level.</p>
-<ul><li>Automating Voice changes the eSpeak voice only; choosing a preset on the screen also sets Speed, Pitch, Gap and Volume.</li>
+<ul><li>Automating Voice changes the eSpeak voice only; choosing a preset on the screen also sets Speed, Pitch, Range, Gap, Volume and the effects.</li>
 <li>The phrases, the selected slot and every setting are saved with your project and in DAW presets.</li>
 <li>MIDI: notes and velocity play the slots (Trigger) or the pitch (Melodic); All Notes Off stops every voice.</li></ul>""")
 
@@ -350,6 +361,10 @@ Voice presets and effects after <b>DJZ-Speak</b> by MushroomFleet (Apache-2.0). 
 
 
 HISTORY = [
+    ("1.2.1", [
+        "The 26 voice presets now really sound different: each one uses its own eSpeak voice (Klatt synthesiser voices, Robosoft and UniRobot robots, announcer, whisper, croak and more) instead of nearly identical male and female variants, and loads its own intonation RANGE and effects settings.",
+        "Melodic mode tunes more accurately on buzzy robot voices (better pitch detection).",
+    ]),
     ("1.2.0", [
         "New SYLLABLE mode: the selected phrase is split across the keys, one syllable per key from the root key up, like a vocal chop kit. Click MODE to step through TRIGGER, MELODIC and SYLLABLE; the screen shows how many syllables there are and which keys play them.",
         "The manual has three new chapters about the voices: how formant speech synthesis works, the history of eSpeak and eSpeak NG, and the computers and films behind the presets.",

@@ -175,7 +175,8 @@ void EspeakService::applyVoice (const VoiceSettings& s, int pitch)
 {
     const auto& p = kVoicePresets[juce::jlimit (0, kNumVoices - 1, s.voice)];
     const auto name = juce::String (p.language) + "+" + p.variant;
-    espeak_SetVoiceByName (name.toRawUTF8());
+    if (espeak_SetVoiceByName (name.toRawUTF8()) != EE_OK)
+        espeak_SetVoiceByName (p.language);   // variant missing: plain language voice
     espeak_SetParameter (espeakRATE, juce::jlimit (80, 450, s.speed), 0);
     espeak_SetParameter (espeakPITCH, juce::jlimit (0, 99, pitch), 0);
     espeak_SetParameter (espeakRANGE, juce::jlimit (0, 99, s.range), 0);
@@ -255,23 +256,40 @@ int EspeakService::pitchForFrequency (int voice, int range, double hz, double& e
 
 double EspeakService::measureF0 (const float* data, int n, double sr)
 {
-    // median of autocorrelation pitch estimates over the voiced frames (60 - 500 Hz)
-    const int win = (int) (sr * 0.046);
-    const int minLag = (int) (sr / 500.0), maxLag = (int) (sr / 60.0);
-    std::vector<double> est;
-    for (int s = 0; s + win + maxLag < n; s += win / 2)
+    // median of YIN pitch estimates over the voiced frames (55 - 500 Hz); YIN picks the first
+    // clear period, which avoids the octave errors plain autocorrelation makes on buzzy robot voices
+    const int win = (int) (sr * 0.03);
+    const int minLag = (int) (sr / 500.0), maxLag = (int) (sr / 55.0);
+    std::vector<double> est, diff ((size_t) maxLag + 2);
+    for (int s = 0; s + win + maxLag + 2 < n; s += win / 2)
     {
         double e = 0;
         for (int i = 0; i < win; ++i) e += (double) data[s + i] * data[s + i];
         if (e / win < 1.0e-4) continue;
-        int best = 0; double bv = 0;
-        for (int lag = minLag; lag < maxLag; ++lag)
+        double running = 0;
+        int found = -1;
+        for (int lag = 1; lag <= maxLag + 1; ++lag)
         {
-            double a = 0;
-            for (int i = 0; i < win; ++i) a += (double) data[s + i] * data[s + i + lag];
-            if (a > bv) { bv = a; best = lag; }
+            double d = 0;
+            for (int i = 0; i < win; ++i) { const double x = (double) data[s + i] - data[s + i + lag]; d += x * x; }
+            running += d;
+            diff[(size_t) lag] = running > 0 ? d * lag / running : 1.0;   // cumulative mean normalised difference
         }
-        if (best > 0 && bv > 0.5 * e) est.push_back (sr / best);
+        for (int lag = minLag; lag <= maxLag; ++lag)
+            if (diff[(size_t) lag] < 0.2)
+            {
+                while (lag + 1 <= maxLag && diff[(size_t) lag + 1] < diff[(size_t) lag]) ++lag;
+                found = lag;
+                break;
+            }
+        if (found > 0)
+        {
+            // parabolic interpolation for sub-sample accuracy
+            const double a = diff[(size_t) found - 1], b = diff[(size_t) found], c = diff[(size_t) found + 1];
+            const double den = a - 2 * b + c;
+            const double lag = found + (std::abs (den) > 1e-12 ? 0.5 * (a - c) / den : 0.0);
+            est.push_back (sr / lag);
+        }
     }
     if (est.empty()) return 0.0;
     std::nth_element (est.begin(), est.begin() + (long) est.size() / 2, est.end());
