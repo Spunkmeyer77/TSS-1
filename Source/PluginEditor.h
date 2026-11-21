@@ -62,6 +62,31 @@ private:
     juce::Image off, on;
 };
 
+// The phrase box. It only accepts the keyboard after a click on it: otherwise JUCE would hand it
+// the keyboard whenever the plug-in window is activated, and Live's computer MIDI keyboard would stop working.
+class PhraseEditor : public juce::TextEditor
+{
+public:
+    PhraseEditor() { setWantsKeyboardFocus (false); }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        setWantsKeyboardFocus (true);
+        grabKeyboardFocus();
+        juce::TextEditor::mouseDown (e);
+    }
+    void endTyping()
+    {
+        const bool had = hasKeyboardFocus (true);
+        setWantsKeyboardFocus (false);
+        if (had) giveAwayKeyboardFocus();
+    }
+    void focusLost (FocusChangeType cause) override
+    {
+        setWantsKeyboardFocus (false);
+        juce::TextEditor::focusLost (cause);
+    }
+};
+
 // the green CRT: voice, mode, the phrase editor, the waveform and the readouts
 class CrtScreen : public juce::Component, private juce::TextEditor::Listener
 {
@@ -76,6 +101,8 @@ public:
     void mouseMove (const juce::MouseEvent&) override;
     void refresh (int frame);
     void showSlot (int slot);
+    void endTyping()                      { if (editor.hasKeyboardFocus (true)) commitText(); editor.endTyping(); }
+    bool isTypingIn (const juce::Component* c) const { return c == &editor || editor.isParentOf (c); }
     void setHighlight (const juce::String& paramId) { highlight = paramId; }
 
 private:
@@ -92,7 +119,7 @@ private:
     void drawGlow (juce::Graphics&, const juce::String&, juce::Rectangle<float>, juce::Colour, juce::Justification, float size);
 
     TSS1Processor& proc;
-    juce::TextEditor editor;
+    PhraseEditor editor;
     std::vector<Hot> hots;
     juce::String hover, highlight, dragParam;
     float dragStartValue = 0;
@@ -129,6 +156,8 @@ public:
     static constexpr int kWidth = 890, kHeight = 540, kOffsetX = 55, kOffsetY = 30;
     void showAbout (bool instant = false) { about.open (instant); }
     void refreshNow()                     { timerCallback(); }
+
+    void mouseDown (const juce::MouseEvent&) override;   // any click outside the phrase box ends typing
 
 private:
     void timerCallback() override;

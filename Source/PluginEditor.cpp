@@ -248,7 +248,7 @@ void CrtScreen::resized()
 
 void CrtScreen::showSlot (int slot)
 {
-    if (shownSlot != -1 && editor.hasKeyboardFocus (true)) { commitText(); editor.giveAwayKeyboardFocus(); }
+    if (shownSlot != -1 && editor.hasKeyboardFocus (true)) { commitText(); editor.endTyping(); }
     shownSlot = slot;
     editor.setText (proc.getPhrase (slot), dontSendNotification);
 }
@@ -260,8 +260,8 @@ void CrtScreen::commitText()
 
 void CrtScreen::textEditorTextChanged (TextEditor&)          { commitText(); }
 // Return or Esc ends typing and gives the keyboard back to the host (Live's computer MIDI keyboard)
-void CrtScreen::textEditorReturnKeyPressed (TextEditor&)     { commitText(); proc.previewSlot (shownSlot); editor.giveAwayKeyboardFocus(); }
-void CrtScreen::textEditorEscapeKeyPressed (TextEditor&)     { editor.setText (proc.getPhrase (shownSlot), dontSendNotification); commitText(); editor.giveAwayKeyboardFocus(); }
+void CrtScreen::textEditorReturnKeyPressed (TextEditor&)     { commitText(); proc.previewSlot (shownSlot); editor.endTyping(); }
+void CrtScreen::textEditorEscapeKeyPressed (TextEditor&)     { editor.setText (proc.getPhrase (shownSlot), dontSendNotification); commitText(); editor.endTyping(); }
 void CrtScreen::textEditorFocusLost (TextEditor&)            { commitText(); }
 
 void CrtScreen::drawGlow (Graphics& g, const String& s, Rectangle<float> r, Colour c, Justification j, float size)
@@ -809,6 +809,7 @@ TSS1Editor::TSS1Editor (TSS1Processor& p)
     setResizeLimits (kWidth * 6 / 10, kHeight * 6 / 10, kWidth * 2, kHeight * 2);
     if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) kWidth / kHeight);
     setSize (kWidth, kHeight);
+    content.addMouseListener (this, true);
     startTimerHz (30);
 }
 
@@ -826,6 +827,11 @@ void TSS1Editor::resized()
 {
     const float s = (float) getWidth() / (float) kWidth;
     content.setTransform (AffineTransform::translation ((float) -kOffsetX, (float) -kOffsetY).scaled (s));
+}
+
+void TSS1Editor::mouseDown (const MouseEvent& e)
+{
+    if (! screen.isTypingIn (e.originalComponent)) screen.endTyping();
 }
 
 void TSS1Editor::timerCallback()

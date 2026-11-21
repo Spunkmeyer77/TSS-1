@@ -228,6 +228,16 @@ int main (int argc, char** argv)
             if (auto os = f.createOutputStream()) png.writeImageToStream (img, *os);
             check (f.existsAsFile(), juce::String ("snapshot ") + name);
         };
+        {
+            // nothing may take the keyboard when the window is activated (Live's computer MIDI keyboard must keep working)
+            std::function<int (juce::Component&)> count = [&] (juce::Component& c)
+            {
+                int n = (c.getWantsKeyboardFocus() && c.isVisible()) ? 1 : 0;
+                for (auto* ch : c.getChildren()) n += count (*ch);
+                return n;
+            };
+            check (count (*ed) == 0, "no component wants the keyboard until the phrase box is clicked");
+        }
         snap ("editor.png");
         snap ("editor@2x.png", 2.0f);
         // playing: the word and waveform on the screen, the key lit

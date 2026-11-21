@@ -270,6 +270,9 @@ Voice presets and effects after <b>DJZ-Speak</b> by MushroomFleet (Apache-2.0). 
 
 
 HISTORY = [
+    ("1.1.1", [
+        "Fixed: TSS-1 took the computer keyboard whenever its window was active, so Ableton Live's computer MIDI keyboard typed into the phrase box. The phrase box now only takes the keyboard after you click it; Return, Esc or a click anywhere else on the panel gives it back.",
+    ]),
     ("1.1.0", [
         "New BEAT SYNC mode: speaks a phrase one syllable per step, locked to the DAW's tempo and grid (1/4, 1/8, 1/16, 1/8 triplet, 1/16 triplet). Choose it with SYNC on the screen; GATE makes the syllables loop while the key is held.",
         "The computer keyboard now stays with your DAW: Ableton Live's computer MIDI keyboard plays TSS-1. The plug-in only takes the keyboard while you type a phrase; Return, Esc or a click elsewhere gives it back.",
