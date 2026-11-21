@@ -239,6 +239,74 @@ pronounces them, so write phrases as you want them heard.</div>""")
 <tr><td><b>CRUSH</b> (0 - 1)</td><td>Bit and sample-rate reduction, from 16 bits down to 4 bits and down to about 2.7 kHz: speech-chip grit at the top.</td></tr>
 <tr><td><b>LEVEL</b> (screen)</td><td>Output level, -24 to +6 dB, with a soft limiter.</td></tr></table>""")
 
+    ch("HOW THE VOICE IS MADE", """
+<p>TSS-1 contains no recordings of anyone speaking. Every word is calculated from scratch, live, by <b>formant synthesis</b>:
+the same family of techniques behind the talking computers of the 1980s and 1990s.</p>
+<h4>The source and the filter</h4>
+<p>Human speech has two parts. The vocal folds make a buzzing tone (the <i>source</i>), and the throat, mouth, tongue and lips
+shape it (the <i>filter</i>). That shaping creates a few strong resonant peaks in the spectrum, called <b>formants</b>.
+The first two or three formants are what make an "ee" different from an "ah" or an "oo". Noise from the breath and the teeth
+supplies the hiss of "s", "f" and "sh", and short bursts give the "p", "t" and "k".</p>
+<p>A formant synthesiser rebuilds this electronically: an oscillator plays the part of the vocal folds, a bank of resonant
+filters plays the part of the mouth, and a noise generator adds the consonants. Moving the filter frequencies from one
+setting to the next makes the voice glide from sound to sound, the way a tongue moves.</p>
+<h4>From text to sound, step by step</h4>
+<ul><li><b>Text to phonemes.</b> Your phrase is converted into phonemes (speech sounds) using pronunciation rules and an
+exception dictionary for English, the "en_dict" built into TSS-1. Numbers and abbreviations are spelled out.</li>
+<li><b>Prosody.</b> The engine decides the stress of each syllable, the length of each sound and the pitch contour:
+falling at a full stop, rising at a question mark. RANGE scales this contour; at 0 it is flat.</li>
+<li><b>Synthesis.</b> Each phoneme is a stored sequence of formant frames (the frequencies, widths and levels of the
+resonances over time). The engine glides between them and renders 22,050 samples per second.</li>
+<li><b>In TSS-1.</b> The finished phrase is kept in memory, resampled to your project's sample rate, tuned for Melodic
+mode, cut into syllables for the Syllable and Sync modes, and sent through the effects.</li></ul>
+<p>This is why the voice sounds unmistakably synthetic. It never was a person, so it cannot sound like one. It is a
+model of a vocal tract, with all the buzz, precision and strangeness that implies.</p>""")
+
+    ch("WHERE THE VOICE COMES FROM", """
+<p>The speech engine in TSS-1 is <b>eSpeak NG</b> (version 1.52), an open-source speech synthesiser with roots going back 30 years.</p>
+<ul><li><b>1995, Speak.</b> Jonathan Duddington, a British programmer, wrote a speech synthesiser called Speak for Acorn
+computers running RISC OS. It spoke British English and was designed for the very small memory and slow processors of the time:
+the reason eSpeak is still tiny and fast today.</li>
+<li><b>2006, eSpeak.</b> Speak was released for Linux as free software under the GNU GPL, gained a Windows version
+in 2007, was renamed <b>eSpeak</b> and grew to dozens of languages. Its own spectral formant method sits alongside a
+second synthesiser based on the classic Klatt design.</li>
+<li><b>2015, eSpeak NG.</b> When development of the original stopped in 2015, Reece Dunn and a group of developers
+continued it as <b>eSpeak NG</b> ("Next Generation"). They cleaned up the code, moved it to GitHub and kept adding languages;
+it now supports more than 100 languages and accents.</li>
+<li><b>Who made the languages.</b> Most of the pronunciation rules were written and improved by volunteers, many of them
+blind people who use eSpeak every day as their screen reader voice. Fast, clear and intelligible at high speeds matter more
+to them than sounding human, which is exactly the sound TSS-1 is about.</li></ul>
+<h4>The voice variants</h4>
+<p>eSpeak NG has one base voice per language and a set of <b>variants</b> that reshape it: different formant frequencies
+(a larger or smaller "vocal tract"), base pitch, roughness, breathiness and tone. TSS-1 uses the English base voice, its
+Received Pronunciation version (BRITISH ANDROID) and the male (m1 - m4) and female (f1 - f4) variants. The Klatt
+synthesiser is included in the build too; Dennis Klatt's name runs through the whole history of computer speech (next chapter).</p>
+<h4>The presets</h4>
+<p>The 26 presets were designed for <b>DJZ-Speak</b>, an open-source robotic speech tool by MushroomFleet. Each one is a
+recipe: a variant plus speed, pitch, volume and word gap chosen to suggest a famous kind of machine voice. They are
+impressions made with eSpeak, not copies of the original products or recordings.</p>""")
+
+    ch("THE ANCESTORS BEHIND THE PRESETS", """
+<p>The preset names point to the machines and films that taught the world what a computer voice sounds like.</p>
+<table><tr><th>Preset</th><th>The original</th></tr>
+<tr><td><b>DECTALK</b></td><td>DECtalk, Digital Equipment Corporation, 1984: a speech terminal based on the research of
+Dennis Klatt at MIT (his systems were known as MITalk and KlatTalk). Klatt modelled its voices on his own family; its
+"Perfect Paul" voice was based on his own, and the same voice, through the CallText 5010 synthesiser, became the
+voice of Stephen Hawking.</td></tr>
+<tr><td><b>ATARI SAM</b>, <b>APPLE II</b></td><td>S.A.M., the Software Automatic Mouth, by Mark Barton, sold by Don't Ask Software
+from 1982: one of the first commercial all-software speech synthesisers, for the Atari 8-bit, Apple II and Commodore 64.</td></tr>
+<tr><td><b>AMIGA NARRATOR</b></td><td>The Amiga's built-in narrator device (1985), from the same Mark Barton with Joseph Katz,
+whose company also wrote MacinTalk for the first Macintosh. It made the Amiga one of the first home computers to talk out of the box.</td></tr>
+<tr><td><b>DR. SBAITSO</b></td><td>Dr. Sbaitso, Creative Labs, 1991: the talking "therapist" bundled with Sound Blaster cards
+("SoundBlaster Acting Intelligent Text-to-Speech Operator").</td></tr>
+<tr><td><b>VINTAGE COMPUTER</b>, <b>CLASSIC ROBOT</b></td><td>The general sound of 1980s home-computer speech chips and of
+countless film and television robots.</td></tr>
+<tr><td><b>Cinematic AI</b> presets</td><td>Impressions of the cold computer, the polite android, the menacing cyborg and the
+cheerful little robot from film and games. They are styles, not imitations of any actor's voice.</td></tr>
+<tr><td><b>Modern, technical, character</b></td><td>Everyday machine voices (navigation systems, station announcements,
+alerts and countdowns) and character voices that use the female, child-like and elderly variants.</td></tr></table>
+<p>All of these names belong to their owners; TSS-1 is not affiliated with or endorsed by any of them.</p>""")
+
     rows = presets()
     body = "<table><tr><th>Preset</th><th>eSpeak voice</th><th class='c'>Speed</th><th class='c'>Pitch</th><th class='c'>Volume</th><th class='c'>Gap</th></tr>"
     last = None
