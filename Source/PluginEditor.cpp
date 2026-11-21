@@ -348,8 +348,18 @@ void CrtScreen::paint (Graphics& g)
 
     // mode
     x = text ("> MODE  ", L, 48, kGreenMid);
-    text (melodic ? "MELODIC" : "TRIGGER", x, 48, kGreen, "mode");
-    if (! melodic)
+    const bool syllableMode = proc.isSyllableMode();
+    text (melodic ? "MELODIC" : syllableMode ? "SYLLABLE" : "TRIGGER", x, 48, kGreen, "mode");
+    if (syllableMode)
+    {
+        const int rn = (int) val ("root");
+        auto sc = proc.getClip (sel);
+        const int n = jmax (1, sc != nullptr ? (int) sc->syllables.size() : 1);
+        const String s = String (n) + " SYL  KEYS " + TSS1Processor::noteName (rn) + "-" + TSS1Processor::noteName (rn + n - 1);
+        g.setFont (mono (fs, true));
+        text (s, R - (float) GlyphArrangement::getStringWidthInt (g.getCurrentFont(), s) - 1.0f, 48, kGreen, "root");
+    }
+    else if (! melodic)
     {
         const int rn = (int) val ("root");
         const String s = "KEYS " + TSS1Processor::noteName (rn) + "-" + TSS1Processor::noteName (rn + kNumSlots - 1);
@@ -381,7 +391,7 @@ void CrtScreen::paint (Graphics& g)
 
     // slot line
     x = text ("> SLOT " + String (sel + 1).paddedLeft ('0', 2), L, 78, kGreenMid);
-    if (! melodic) text ("  KEY " + TSS1Processor::noteName ((int) val ("root") + sel), x, 78, kGreenMid);
+    if (! melodic && ! syllableMode) text ("  KEY " + TSS1Processor::noteName ((int) val ("root") + sel), x, 78, kGreenMid);
     {
         const auto st = proc.getSlotStatus (sel);
         const String s = st == TSS1Processor::SlotStatus::ready ? "READY" : st == TSS1Processor::SlotStatus::empty ? "EMPTY" : "RENDERING";
@@ -400,7 +410,7 @@ void CrtScreen::paint (Graphics& g)
     // playback: the clip on show, the word being spoken and the waveform
     const auto ps = proc.getPlayState();
     SpeechClip::Ptr clip = proc.getPlayingClip();
-    const bool showPlaying = ps.playing && clip != nullptr && (melodic ? ps.slot == sel : ps.slot == sel);
+    const bool showPlaying = ps.playing && clip != nullptr && ps.slot == sel;
     if (! showPlaying) clip = proc.getClip (sel);
     const auto word = Rectangle<float> (L, 157.0f, W, 18.0f);
     if (showPlaying)
@@ -462,7 +472,7 @@ void CrtScreen::paint (Graphics& g)
     else if (! es.isReady())        status = "STARTING SPEECH ENGINE";
     else if (editor.hasKeyboardFocus (true)) status = "TYPING - RETURN: DONE  ESC: CANCEL";
     else if (proc.isRendering())    status = "RENDERING";
-    else                            status = melodic ? "READY - PLAY THE KEYBOARD" : "READY";
+    else                            status = melodic ? "READY - PLAY THE KEYBOARD" : syllableMode ? "READY - ONE SYLLABLE PER KEY" : "READY";
     x = text (status, L, 259, es.getError().isNotEmpty() ? Colour (0xffffd27d) : kGreenMid);
     if ((frame / 15) % 2 == 0) { g.setColour (kGreen); g.fillRect (x + 3, 261.0f, 7.0f, 11.0f); }
 }
@@ -497,7 +507,13 @@ void CrtScreen::doAction (const String& a)
     const int vi = ((AudioParameterChoice*) ap.getParameter ("voice"))->getIndex();
     if (a == "voicePrev") proc.loadVoicePreset ((vi + kNumVoices - 1) % kNumVoices);
     else if (a == "voiceNext") proc.loadVoicePreset ((vi + 1) % kNumVoices);
-    else if (a == "mode") toggle ("mode");
+    else if (a == "mode")
+    {
+        auto* p = (AudioParameterChoice*) ap.getParameter ("mode");
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 ((float) ((p->getIndex() + 1) % 3)));
+        p->endChangeGesture();
+    }
     else if (a == "poly") toggle ("poly");
     else if (a == "gate") toggle ("gate");
     else if (a == "sync")
@@ -842,6 +858,6 @@ void TSS1Editor::timerCallback()
     const bool blink = (frame / 8) % 2 == 0;
     const bool melodic = proc.isMelodic();
     for (int i = 0; i < kNumSlots; ++i)
-        keys[i]->update (i == sel, proc.getSlotStatus (i), ps.playing && ps.slot == i && (! melodic || i == sel), blink);
+        keys[i]->update (i == sel, proc.getSlotStatus (i), ps.playing && ps.slot == i && ((! melodic && ! proc.isSyllableMode()) || i == sel), blink);
     screen.refresh (frame);
 }

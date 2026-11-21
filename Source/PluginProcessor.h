@@ -68,6 +68,7 @@ public:
     PlayState getPlayState() const noexcept;
     SpeechClip::Ptr getPlayingClip() const;
     bool isMelodic() const noexcept                       { return mode->getIndex() == 1; }
+    bool isSyllableMode() const noexcept                  { return mode->getIndex() == 2; }
     bool isRendering() const noexcept                     { return busy.load(); }
 
     static juce::String noteName (int note);
@@ -85,12 +86,12 @@ private:
         int slot = -1, note = -1, age = 0;
         bool active = false;
         // beat-synced mode: one syllable per step
-        bool seq = false, held = false;
+        bool seq = false, held = false, chop = false;   // chop: plays one syllable only
         int syl = 0, segEnd = 0;
         juce::int64 nextStep = 0;
         double countdown = 0;
     };
-    void startVoice (int slot, int note, float velocity);
+    void startVoice (int slot, int note, float velocity, int syllable = -1);
     void stopNote (int note);
     void renderVoices (float* out, int numSamples);
     void processFx (float* mono, int numSamples);

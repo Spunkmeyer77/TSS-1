@@ -170,6 +170,35 @@ int main (int argc, char** argv)
         setParam ("sync", 0.0f);
     }
 
+    // ---- syllable mode: each key says one syllable of the selected phrase
+    {
+        proc.setSelectedSlot (0);
+        setParam ("mode", 2.0f);
+        auto c = proc.getClip (0);
+        const int n = c != nullptr ? (int) c->syllables.size() : 0;
+        std::vector<float> chops;
+        bool allShort = true, allSound = true;
+        for (int k = 0; k < n; ++k)
+        {
+            auto m = note (36 + k);
+            run ((int) (sr * 0.7 / block), &m, &chops);
+            int first = -1, last = 0;
+            for (int i = 0; i < (int) rec.size(); ++i) if (std::abs (rec[(size_t) i]) > 0.005f) { if (first < 0) first = i; last = i; }
+            const int segLen = (k + 1 < n ? c->syllables[(size_t) k + 1] : c->numSamples()) - c->syllables[(size_t) k];
+            const double expected = segLen / 22050.0;
+            if (first < 0) allSound = false;
+            else if ((last - first) / sr > expected + 0.03) allShort = false;
+        }
+        check (n > 0 && allSound, "syllable mode: all " + juce::String (n) + " keys speak");
+        check (allShort, "syllable mode: each key stops at the end of its syllable");
+        auto m = note (36 + n);
+        run ((int) (sr * 0.5 / block), &m);
+        check (rms() < 0.0005, "syllable mode: the key after the last syllable is silent");
+        writeWav (outDir.getChildFile ("syllables.wav"), chops, sr);
+        demo.insert (demo.end(), chops.begin(), chops.end());
+        setParam ("mode", 0.0f);
+    }
+
     // ---- melodic mode: keys set the pitch
     {
         proc.setSelectedSlot (6);   // "Electro"

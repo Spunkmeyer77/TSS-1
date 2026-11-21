@@ -31,7 +31,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TSS1Processor::createLayout(
     l.add (std::make_unique<AudioParameterInt> (ParameterID ("range", 1), "Range", 0, 99, 50));
     l.add (std::make_unique<AudioParameterInt> (ParameterID ("gap", 1), "Word Gap", 0, 30, d.gap, AudioParameterIntAttributes().withLabel ("x10 ms")));
     l.add (std::make_unique<AudioParameterInt> (ParameterID ("amp", 1), "Voice Volume", 10, 200, d.amplitude));
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID ("mode", 1), "Mode", StringArray { "Trigger", "Melodic" }, 0));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID ("mode", 1), "Mode", StringArray { "Trigger", "Melodic", "Syllable" }, 0));
     l.add (std::make_unique<AudioParameterInt> (ParameterID ("root", 1), "Root Note", 0, 108, 36,
                AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return TSS1Processor::noteName (v); })));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID ("poly", 1), "Voices", StringArray { "Mono", "Poly" }, 0));
@@ -358,7 +358,7 @@ double TSS1Processor::stepBeats() const noexcept
     return steps[juce::jlimit (0, 5, sync->getIndex())];
 }
 
-void TSS1Processor::startVoice (int slot, int note, float velocity)
+void TSS1Processor::startVoice (int slot, int note, float velocity, int syllable)
 {
     SpeechClip::Ptr clip;
     double ratio = 1.0;
@@ -388,6 +388,7 @@ void TSS1Processor::startVoice (int slot, int note, float velocity)
         }
     }
     if (clip == nullptr || clip->numSamples() < 2) return;
+    if (syllable >= (int) clip->syllables.size()) return;   // syllable mode: past the last syllable
     if (melodic && renderer.isThreadRunning()) renderer.notify();
 
     // mono: the new note cuts the others with a short fade
@@ -416,6 +417,16 @@ void TSS1Processor::startVoice (int slot, int note, float velocity)
     target->active = true;
     target->held = true;
     target->seq = false;
+    target->chop = false;
+
+    if (syllable >= 0)
+    {
+        // syllable mode: this key says one syllable of the phrase
+        target->chop = true;
+        target->pos = clip->syllables[(size_t) syllable];
+        target->segEnd = syllable + 1 < (int) clip->syllables.size() ? clip->syllables[(size_t) syllable + 1] : clip->numSamples();
+    }
+    else
 
     if (const double step = stepBeats(); step > 0 && ! clip->syllables.empty())
     {
@@ -481,7 +492,13 @@ void TSS1Processor::renderVoices (float* out, int numSamples)
             const int i1 = (int) v.pos;
             if (! v.seq && i1 >= len - 1) { v.active = false; break; }
             float edge = 1.0f;
-            if (v.seq)
+            if (v.chop)
+            {
+                const int end = juce::jmin (v.segEnd, len - 1);
+                if (i1 >= end) { v.active = false; break; }
+                edge = (float) juce::jlimit (0.0, 1.0, (end - v.pos) / (v.inc * fadeLen));
+            }
+            else if (v.seq)
             {
                 const int end = juce::jmin (v.segEnd, len - 1);
                 if (i1 >= end) { v.fade += v.fadeStep; if (v.fade <= 0.0f && v.fadeStep < 0) { v.active = false; break; } continue; }
@@ -616,6 +633,11 @@ void TSS1Processor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
             const int note = m.getNoteNumber();
             if (isMelodic())
                 startVoice (selectedSlot.load(), note, m.getFloatVelocity());
+            else if (isSyllableMode())
+            {
+                if (note >= rootNote && note < rootNote + 64)
+                    startVoice (selectedSlot.load(), note, m.getFloatVelocity(), note - rootNote);
+            }
             else if (note >= rootNote && note < rootNote + kNumSlots)
                 startVoice (note - rootNote, note, m.getFloatVelocity());
         }

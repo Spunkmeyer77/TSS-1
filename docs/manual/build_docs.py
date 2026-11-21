@@ -103,6 +103,7 @@ by <b>eSpeak-NG formant synthesis</b>: no recordings and no AI models, just the 
 talking computers, speech chips and film robots.</p>
 <ul><li>20 phrase slots, each played by its own MIDI key (C1 to G2 by default).</li>
 <li><b>Trigger</b> mode plays phrases like one-shot samples; <b>Melodic</b> mode tunes the selected phrase to the notes you play.</li>
+<li><b>Syllable</b> mode splits the selected phrase across the keys: one syllable per key, like a vocal chop kit.</li>
 <li><b>Sync</b> speaks a phrase one syllable per beat, locked to your DAW's tempo (1/4 to 1/16 triplets).</li>
 <li>26 voice presets, from Dr. Sbaitso and DECtalk to HAL 9000 and GLaDOS-style voices.</li>
 <li>Speed, pitch, intonation range, word gap and volume, plus a robot effects chain: filter, harmonic boost and bit crusher.</li>
@@ -164,7 +165,7 @@ so the 20 slots cover C1 to G2. Change the root on the screen (<span class="k">K
 <p>Everything shown in brackets or bright green can be clicked or dragged.</p>
 <ul><li><span class="k">VOICE</span> click the name for the list of 26 presets; <span class="k">[&lt;]</span> <span class="k">[&gt;]</span> step through them.
 Choosing a preset sets SPEED, PITCH, GAP and VOL to its values.</li>
-<li><span class="k">MODE</span> click to switch between TRIGGER and MELODIC. On the right: the keys used (drag to move the root).</li>
+<li><span class="k">MODE</span> click to step through TRIGGER, MELODIC and SYLLABLE. On the right: the keys used (drag to move the root).</li>
 <li><span class="k">PLAY</span> MONO (a new note cuts the one playing) or POLY (phrases overlap, up to 8);
 ONE-SHOT (phrases always play to the end) or GATE (they stop when you release the key);
 SYNC: click for the beat-synced syllable mode (chapter Beat Sync). LEVEL: drag for the output level.</li>
@@ -201,6 +202,17 @@ again at the right voice pitch for each note (so it does not sound sped-up or ch
 All notes from C0 to C6 are prepared in the background; a note that is not ready yet plays at once from the nearest one.</p>
 <div class="tip"><b>Tip:</b> turn RANGE to 0 in Melodic mode: the voice then holds a steady pitch, and sings exactly on the note.</div>
 </div><img class="shot half" src="{img('melodic.jpg')}"></div>""")
+
+    ch("SYLLABLE MODE", """
+<p>Syllable mode turns the <b>selected phrase</b> into a vocal chop kit: each key says one syllable of it, at the voice's
+own pitch. The root key (C1 by default) says the first syllable, the next key up the second, and so on.
+"Transistor speech system online" gives 8 keys: TRAN, SIS, TOR, SPEECH, SYS, TEM, ON, LINE. Keys after the last syllable are silent.</p>
+<ul><li>The screen shows how many syllables the phrase has and which keys they are on (for example <span class="k">8 SYL KEYS C1-G1</span>);
+drag it up or down to move the root key.</li>
+<li>Click another slot key to chop a different phrase; edit the text and the keys follow straight away.</li>
+<li>Each syllable plays to its end (ONE-SHOT) or for as long as you hold the key (GATE). MONO cuts the previous syllable,
+POLY lets them overlap. SYNC is not used in this mode.</li></ul>
+<div class="tip"><b>Tip:</b> program the syllables in a MIDI clip in any order to make new words and rhythms from one phrase.</div>""")
 
     ch("BEAT SYNC", """
 <p>Sync makes TSS-1 speak a phrase <b>one syllable per step</b>, locked to your DAW's tempo and grid: the robotic,
@@ -270,6 +282,9 @@ Voice presets and effects after <b>DJZ-Speak</b> by MushroomFleet (Apache-2.0). 
 
 
 HISTORY = [
+    ("1.2.0", [
+        "New SYLLABLE mode: the selected phrase is split across the keys, one syllable per key from the root key up, like a vocal chop kit. Click MODE to step through TRIGGER, MELODIC and SYLLABLE; the screen shows how many syllables there are and which keys play them.",
+    ]),
     ("1.1.1", [
         "Fixed: TSS-1 took the computer keyboard whenever its window was active, so Ableton Live's computer MIDI keyboard typed into the phrase box. The phrase box now only takes the keyboard after you click it; Return, Esc or a click anywhere else on the panel gives it back.",
     ]),
