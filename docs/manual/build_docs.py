@@ -352,6 +352,7 @@ Voice presets and effects after <b>DJZ-Speak</b> by MushroomFleet (Apache-2.0). 
 HISTORY = [
     ("1.2.0", [
         "New SYLLABLE mode: the selected phrase is split across the keys, one syllable per key from the root key up, like a vocal chop kit. Click MODE to step through TRIGGER, MELODIC and SYLLABLE; the screen shows how many syllables there are and which keys play them.",
+        "The manual has three new chapters about the voices: how formant speech synthesis works, the history of eSpeak and eSpeak NG, and the computers and films behind the presets.",
     ]),
     ("1.1.1", [
         "Fixed: TSS-1 took the computer keyboard whenever its window was active, so Ableton Live's computer MIDI keyboard typed into the phrase box. The phrase box now only takes the keyboard after you click it; Return, Esc or a click anywhere else on the panel gives it back.",
