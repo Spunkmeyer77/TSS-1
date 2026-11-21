@@ -126,6 +126,8 @@ Knob::Knob (TSS1Processor& p, const String& id)
     if (auto* prm = p.apvts.getParameter (id))
         setDoubleClickReturnValue (true, prm->convertFrom0to1 (prm->getDefaultValue()));
     setMouseDragSensitivity (220);
+    setWantsKeyboardFocus (false);
+    setMouseClickGrabsKeyboardFocus (false);
     setVelocityBasedMode (false);
     setPopupDisplayEnabled (false, false, nullptr);
 }
@@ -135,6 +137,8 @@ Rocker::Rocker (TSS1Processor& p, const String& id)
       attachment (p.apvts, id, *this)
 {
     setClickingTogglesState (true);
+    setWantsKeyboardFocus (false);
+    setMouseClickGrabsKeyboardFocus (false);
 }
 
 void Rocker::paintButton (Graphics& g, bool over, bool)
@@ -159,6 +163,8 @@ SlotKey::SlotKey (TSS1Processor& p, int i) : proc (p), index (i),
     off (image ("key_off.png")), on (image ("key_on.png"))
 {
     setRepaintsOnMouseActivity (false);
+    setWantsKeyboardFocus (false);
+    setMouseClickGrabsKeyboardFocus (false);
 }
 
 void SlotKey::update (bool sel, TSS1Processor::SlotStatus st, bool play, bool bl)
@@ -230,7 +236,7 @@ CrtScreen::CrtScreen (TSS1Processor& p) : proc (p)
     editor.setColour (TextEditor::outlineColourId, Colours::transparentBlack);
     editor.setColour (TextEditor::focusedOutlineColourId, Colours::transparentBlack);
     editor.setColour (CaretComponent::caretColourId, kGreen);
-    editor.setTextToShowWhenEmpty ("TYPE A PHRASE...", kGreenDim);
+    editor.setTextToShowWhenEmpty ("CLICK HERE AND TYPE A PHRASE", kGreenDim);
     editor.addListener (this);
     showSlot (proc.getSelectedSlot());
 }
@@ -242,7 +248,7 @@ void CrtScreen::resized()
 
 void CrtScreen::showSlot (int slot)
 {
-    if (shownSlot != -1 && editor.hasKeyboardFocus (true)) commitText();
+    if (shownSlot != -1 && editor.hasKeyboardFocus (true)) { commitText(); editor.giveAwayKeyboardFocus(); }
     shownSlot = slot;
     editor.setText (proc.getPhrase (slot), dontSendNotification);
 }
@@ -253,8 +259,9 @@ void CrtScreen::commitText()
 }
 
 void CrtScreen::textEditorTextChanged (TextEditor&)          { commitText(); }
-void CrtScreen::textEditorReturnKeyPressed (TextEditor&)     { commitText(); proc.previewSlot (shownSlot); }
-void CrtScreen::textEditorEscapeKeyPressed (TextEditor&)     { editor.setText (proc.getPhrase (shownSlot), dontSendNotification); unfocusAllComponents(); }
+// Return or Esc ends typing and gives the keyboard back to the host (Live's computer MIDI keyboard)
+void CrtScreen::textEditorReturnKeyPressed (TextEditor&)     { commitText(); proc.previewSlot (shownSlot); editor.giveAwayKeyboardFocus(); }
+void CrtScreen::textEditorEscapeKeyPressed (TextEditor&)     { editor.setText (proc.getPhrase (shownSlot), dontSendNotification); commitText(); editor.giveAwayKeyboardFocus(); }
 void CrtScreen::textEditorFocusLost (TextEditor&)            { commitText(); }
 
 void CrtScreen::drawGlow (Graphics& g, const String& s, Rectangle<float> r, Colour c, Justification j, float size)
@@ -359,7 +366,12 @@ void CrtScreen::paint (Graphics& g)
     // play options
     x = text ("> PLAY  ", L, 63, kGreenMid);
     x = text (val ("poly") > 0.5f ? "POLY" : "MONO", x, 63, kGreen, "poly") + cw;
-    text (val ("gate") > 0.5f ? "GATE" : "ONE-SHOT", x, 63, kGreen, "gate");
+    x = text (val ("gate") > 0.5f ? "GATE" : "ONE-SHOT", x, 63, kGreen, "gate") + cw;
+    {
+        static const char* syncNames[] = { "OFF", "1/4", "1/8", "1/16", "1/8T", "1/16T" };
+        const int si = jlimit (0, 5, (int) val ("sync"));
+        text ("SYNC " + String (syncNames[si]), x, 63, si > 0 ? kGreen : kGreenMid, "sync", si > 0);
+    }
     {
         const float lv = val ("level");
         const String s = "LEVEL " + String (lv >= 0 ? "+" : "") + String (lv, 1) + "DB";
@@ -448,6 +460,7 @@ void CrtScreen::paint (Graphics& g)
     auto& es = EspeakService::get();
     if (es.getError().isNotEmpty()) status = "ERROR: " + es.getError().toUpperCase();
     else if (! es.isReady())        status = "STARTING SPEECH ENGINE";
+    else if (editor.hasKeyboardFocus (true)) status = "TYPING - RETURN: DONE  ESC: CANCEL";
     else if (proc.isRendering())    status = "RENDERING";
     else                            status = melodic ? "READY - PLAY THE KEYBOARD" : "READY";
     x = text (status, L, 259, es.getError().isNotEmpty() ? Colour (0xffffd27d) : kGreenMid);
@@ -487,6 +500,19 @@ void CrtScreen::doAction (const String& a)
     else if (a == "mode") toggle ("mode");
     else if (a == "poly") toggle ("poly");
     else if (a == "gate") toggle ("gate");
+    else if (a == "sync")
+    {
+        auto* p = (AudioParameterChoice*) ap.getParameter ("sync");
+        PopupMenu m;
+        m.addSectionHeader ("SPEAK SYLLABLES ON THE BEAT");
+        const char* names[] = { "OFF", "1/4", "1/8", "1/16", "1/8 TRIPLET", "1/16 TRIPLET" };
+        for (int i = 0; i < 6; ++i) m.addItem (i + 1, names[i], true, p->getIndex() == i);
+        m.showMenuAsync (PopupMenu::Options().withTargetComponent (this).withMousePosition(), [p] (int r)
+        {
+            if (r <= 0) return;
+            p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 ((float) (r - 1))); p->endChangeGesture();
+        });
+    }
     else if (a == "voiceMenu")
     {
         PopupMenu m;
@@ -699,7 +725,7 @@ void TSS1Editor::Panel::paint (Graphics& g)
     {
         Graphics::ScopedSaveState ss (g);
         g.setImageResamplingQuality (Graphics::highResamplingQuality);
-        g.drawImage (panel, getLocalBounds().toFloat(), RectanglePlacement::stretchToFit);
+        g.drawImage (panel, Rectangle<float> ((float) kOffsetX, (float) kOffsetY, (float) kWidth, (float) kHeight), RectanglePlacement::stretchToFit);
     }
     else g.fillAll (Colour (0xffd8ceb4));
 
@@ -741,13 +767,14 @@ void TSS1Editor::Panel::mouseDown (const MouseEvent& e)
 
 //==============================================================================
 TSS1Editor::TSS1Editor (TSS1Processor& p)
-    : AudioProcessorEditor (&p), proc (p), screen (p), plastic (image ("plastic.jpg"))
+    : AudioProcessorEditor (&p), proc (p), screen (p)
 {
     setLookAndFeel (&lnf);
+    setWantsKeyboardFocus (false);
     addAndMakeVisible (content);
-    content.setBounds (0, 0, kWidth, kHeight);
+    content.setBounds (0, 0, 1000, 600);
     content.addAndMakeVisible (panel);
-    panel.setBounds (0, 0, kWidth, kHeight);
+    panel.setBounds (0, 0, 1000, 600);
     panel.onLogo = [this] { about.open(); };
 
     content.addAndMakeVisible (screen);
@@ -776,7 +803,7 @@ TSS1Editor::TSS1Editor (TSS1Processor& p)
         k->onSelect = [this] (int s) { proc.setSelectedSlot (s); screen.showSlot (s); };
     }
     content.addChildComponent (about);
-    about.setBounds (0, 0, kWidth, kHeight);
+    about.setBounds (kOffsetX, kOffsetY, kWidth, kHeight);
 
     setResizable (true, true);
     setResizeLimits (kWidth * 6 / 10, kHeight * 6 / 10, kWidth * 2, kHeight * 2);
@@ -792,15 +819,13 @@ TSS1Editor::~TSS1Editor()
 
 void TSS1Editor::paint (Graphics& g)
 {
-    if (plastic.isValid()) g.setTiledImageFill (plastic, 0, 0, 1.0f);
-    else g.setColour (Colour (0xffd8ceb4));
-    g.fillAll();
+    g.fillAll (Colour (0xff18181a));
 }
 
 void TSS1Editor::resized()
 {
     const float s = (float) getWidth() / (float) kWidth;
-    content.setTransform (AffineTransform::scale (s));
+    content.setTransform (AffineTransform::translation ((float) -kOffsetX, (float) -kOffsetY).scaled (s));
 }
 
 void TSS1Editor::timerCallback()

@@ -12,6 +12,7 @@ struct SpeechClip : juce::ReferenceCountedObject
     juce::AudioBuffer<float> audio;   // 1 channel
     double sampleRate = 22050.0;
     std::vector<Word> words;
+    std::vector<int> syllables;       // start sample of every syllable (for the beat-synced mode)
     double f0 = 0.0;                  // measured median pitch in Hz (0 if unvoiced)
     juce::String text;
     juce::uint64 key = 0;             // what it was rendered from (text + voice settings)

@@ -103,6 +103,7 @@ by <b>eSpeak-NG formant synthesis</b>: no recordings and no AI models, just the 
 talking computers, speech chips and film robots.</p>
 <ul><li>20 phrase slots, each played by its own MIDI key (C1 to G2 by default).</li>
 <li><b>Trigger</b> mode plays phrases like one-shot samples; <b>Melodic</b> mode tunes the selected phrase to the notes you play.</li>
+<li><b>Sync</b> speaks a phrase one syllable per beat, locked to your DAW's tempo (1/4 to 1/16 triplets).</li>
 <li>26 voice presets, from Dr. Sbaitso and DECtalk to HAL 9000 and GLaDOS-style voices.</li>
 <li>Speed, pitch, intonation range, word gap and volume, plus a robot effects chain: filter, harmonic boost and bit crusher.</li>
 <li>Phrases are rendered in the background while you type, so notes play instantly with no delay.</li>
@@ -147,7 +148,7 @@ If Windows SmartScreen appears, click <b>More info</b> and then <b>Run anyway</b
 <li><b>5</b><strong>Switches</strong> FX (the whole effects chain) and FILTER.</li>
 <li><b>6</b><strong>Phrase slots</strong> 20 keys, one per phrase.</li></ol>
 <p>Knobs: drag up and down (or turn the mouse wheel); double-click to return to the default. Drag a corner of the window
-to resize it.</p>""")
+to resize it. Only typing on the screen uses the computer keyboard; the rest of the time it stays with your DAW.</p>""")
 
     ch("PHRASE SLOTS", f"""
 <img class="shot" src="{img('keys.jpg')}">
@@ -165,11 +166,14 @@ so the 20 slots cover C1 to G2. Change the root on the screen (<span class="k">K
 Choosing a preset sets SPEED, PITCH, GAP and VOL to its values.</li>
 <li><span class="k">MODE</span> click to switch between TRIGGER and MELODIC. On the right: the keys used (drag to move the root).</li>
 <li><span class="k">PLAY</span> MONO (a new note cuts the one playing) or POLY (phrases overlap, up to 8);
-ONE-SHOT (phrases always play to the end) or GATE (they stop when you release the key). LEVEL: drag for the output level.</li>
+ONE-SHOT (phrases always play to the end) or GATE (they stop when you release the key);
+SYNC: click for the beat-synced syllable mode (chapter Beat Sync). LEVEL: drag for the output level.</li>
 <li><span class="k">SLOT</span> the selected slot, its key and whether it is READY.</li></ul></div></div>
 <h4>Typing a phrase</h4>
-<p>Click in the dotted box and type (up to 240 characters). The phrase is rendered a moment after you stop typing.
-<b>Return</b> plays it, <b>Esc</b> cancels the edit. Punctuation shapes the speech: commas and full stops add pauses,
+<p>Click in the dotted box and type (up to 240 characters); the status line shows TYPING. The phrase is rendered a moment
+after you stop typing. <b>Return</b> finishes and plays it, <b>Esc</b> cancels the edit; either one (or clicking anywhere else
+on the panel) gives the computer keyboard back to your DAW, so Ableton Live's computer MIDI keyboard plays TSS-1 again.
+TSS-1 only takes the keyboard while you are typing a phrase. Punctuation shapes the speech: commas and full stops add pauses,
 a question mark raises the intonation.</p>
 <h4>Waveform and readouts</h4>
 <p>While a phrase plays, the word being spoken appears above the waveform and the played part lights up. The bottom line shows
@@ -198,6 +202,21 @@ All notes from C0 to C6 are prepared in the background; a note that is not ready
 <div class="tip"><b>Tip:</b> turn RANGE to 0 in Melodic mode: the voice then holds a steady pitch, and sings exactly on the note.</div>
 </div><img class="shot half" src="{img('melodic.jpg')}"></div>""")
 
+    ch("BEAT SYNC", """
+<p>Sync makes TSS-1 speak a phrase <b>one syllable per step</b>, locked to your DAW's tempo and grid: the robotic,
+chopped vocal of electro records. Click <span class="k">SYNC</span> on the screen and choose a step length:
+<b>1/4, 1/8, 1/16, 1/8 triplet or 1/16 triplet</b> (or OFF).</p>
+<ul><li>When a note starts, the first syllable is spoken at once; each following syllable starts exactly on the next step of the
+DAW's grid. "Transistor speech system online" becomes TRAN - SIS - TOR - SPEECH - SYS - TEM - ON - LINE.</li>
+<li>A syllable longer than the step is cut at the next step; a shorter one leaves a gap, so the rhythm always stays on the grid.</li>
+<li><b>ONE-SHOT</b>: the phrase is spoken once through. <b>GATE</b>: the syllables loop for as long as you hold the key and stop
+when you release it, so the length of your MIDI notes decides how much of the phrase you hear.</li>
+<li>Works in Trigger and Melodic mode (in Melodic mode every syllable is sung at the note you play).</li>
+<li>It follows tempo changes and loops in the arrangement. When the transport is stopped it runs at the DAW's tempo
+(120 BPM if the host gives none).</li></ul>
+<div class="tip"><b>Tip:</b> SYNC 1/16, GATE on, one long note: an endless machine chant. Words split the way eSpeak
+pronounces them, so write phrases as you want them heard.</div>""")
+
     ch("EFFECTS", """
 <p>The robot effects chain from DJZ-Speak, plus a bit crusher. It runs live, so the knobs can be moved and automated while a phrase plays.</p>
 <table><tr><th>Control</th><th>What it does</th></tr>
@@ -221,7 +240,7 @@ All notes from C0 to C6 are prepared in the background; a note that is not ready
 
     ch("AUTOMATION AND MIDI", """
 <p>All of these can be automated in your DAW and MIDI-mapped (Ableton Live: Configure the plug-in, or map its parameters):
-Voice, Speed, Pitch, Range, Word Gap, Voice Volume, Mode, Root Note, Voices (mono/poly), Gate, FX, FX Amount, Filter,
+Voice, Speed, Pitch, Range, Word Gap, Voice Volume, Mode, Root Note, Voices (mono/poly), Gate, Sync, FX, FX Amount, Filter,
 Harmonic Boost, Crush and Level.</p>
 <ul><li>Automating Voice changes the eSpeak voice only; choosing a preset on the screen also sets Speed, Pitch, Gap and Volume.</li>
 <li>The phrases, the selected slot and every setting are saved with your project and in DAW presets.</li>
@@ -251,6 +270,12 @@ Voice presets and effects after <b>DJZ-Speak</b> by MushroomFleet (Apache-2.0). 
 
 
 HISTORY = [
+    ("1.1.0", [
+        "New BEAT SYNC mode: speaks a phrase one syllable per step, locked to the DAW's tempo and grid (1/4, 1/8, 1/16, 1/8 triplet, 1/16 triplet). Choose it with SYNC on the screen; GATE makes the syllables loop while the key is held.",
+        "The computer keyboard now stays with your DAW: Ableton Live's computer MIDI keyboard plays TSS-1. The plug-in only takes the keyboard while you type a phrase; Return, Esc or a click elsewhere gives it back.",
+        "The window is cropped to the case: no more empty space around the hardware.",
+        "The status line shows TYPING while you edit a phrase.",
+    ]),
     ("1.0.0", [
         "First release of TSS-1, the Transistor Speech System: a robotic text-to-speech instrument (AU, VST3, LV2 and standalone app for macOS, Windows and Linux).",
         "eSpeak-NG 1.52 formant speech synthesis built in, with its English voice data; nothing else to install.",

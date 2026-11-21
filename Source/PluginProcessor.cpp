@@ -36,6 +36,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TSS1Processor::createLayout(
                AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int) { return TSS1Processor::noteName (v); })));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID ("poly", 1), "Voices", StringArray { "Mono", "Poly" }, 0));
     l.add (std::make_unique<AudioParameterBool> (ParameterID ("gate", 1), "Gate", false));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID ("sync", 1), "Sync", StringArray { "Off", "1/4", "1/8", "1/16", "1/8T", "1/16T" }, 0));
     l.add (std::make_unique<AudioParameterBool> (ParameterID ("fx", 1), "FX", true));
     l.add (std::make_unique<AudioParameterFloat> (ParameterID ("intensity", 1), "FX Amount", NormalisableRange<float> (0.5f, 2.0f, 0.01f), 1.0f));
     l.add (std::make_unique<AudioParameterBool> (ParameterID ("filter", 1), "Filter", true));
@@ -60,6 +61,7 @@ TSS1Processor::TSS1Processor()
     mode      = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("mode"));
     poly      = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("poly"));
     gate      = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("gate"));
+    sync      = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter ("sync"));
     fxOn      = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("fx"));
     filterOn  = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter ("filter"));
     intensity = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter ("intensity"));
@@ -350,6 +352,12 @@ bool TSS1Processor::isBusesLayoutSupported (const BusesLayout& layouts) const
     return out == juce::AudioChannelSet::stereo() || out == juce::AudioChannelSet::mono();
 }
 
+double TSS1Processor::stepBeats() const noexcept
+{
+    static constexpr double steps[] = { 0.0, 1.0, 0.5, 0.25, 1.0 / 3.0, 1.0 / 6.0 };
+    return steps[juce::jlimit (0, 5, sync->getIndex())];
+}
+
 void TSS1Processor::startVoice (int slot, int note, float velocity)
 {
     SpeechClip::Ptr clip;
@@ -406,6 +414,20 @@ void TSS1Processor::startVoice (int slot, int note, float velocity)
     target->note = note;
     target->age = 0;
     target->active = true;
+    target->held = true;
+    target->seq = false;
+
+    if (const double step = stepBeats(); step > 0 && ! clip->syllables.empty())
+    {
+        // speak the first syllable now and each next one on the following steps of the host's grid
+        const double notePpq = blockPpq + eventOffset / samplesPerBeat;
+        target->seq = true;
+        target->syl = 0;
+        target->pos = clip->syllables[0];
+        target->segEnd = clip->syllables.size() > 1 ? clip->syllables[1] : clip->numSamples();
+        target->nextStep = (juce::int64) std::floor (notePpq / step + 1.0e-4) + 1;
+        target->countdown = ((double) target->nextStep * step - notePpq) * samplesPerBeat;
+    }
 
     uiSlot = slot; uiNote = note; uiPos = 0.0; uiPlaying = true;
     const juce::SpinLock::ScopedLockType sl (clipLock);
@@ -414,6 +436,8 @@ void TSS1Processor::startVoice (int slot, int note, float velocity)
 
 void TSS1Processor::stopNote (int note)
 {
+    for (auto& v : voices)
+        if (v.active && v.note == note) v.held = false;
     if (! gate->get()) return;
     for (auto& v : voices)
         if (v.active && v.note == note && v.fadeStep >= 0)
@@ -429,10 +453,40 @@ void TSS1Processor::renderVoices (float* out, int numSamples)
         if (! v.active) continue;
         const float* d = v.clip->audio.getReadPointer (0);
         const int len = v.clip->numSamples();
+        const auto& syls = v.clip->syllables;
+        const double step = stepBeats();
+        const double fadeLen = 0.004 * hostRate;     // syllable edges
         for (int i = 0; i < numSamples; ++i)
         {
+            if (v.seq)
+            {
+                if (step <= 0) v.seq = false;    // sync switched off: let the phrase run on
+                else if ((v.countdown -= 1.0) <= 0.0)
+                {
+                    // next step: next syllable (gate mode loops the phrase while the key is held)
+                    ++v.nextStep;
+                    v.countdown += step * samplesPerBeat;
+                    if (++v.syl >= (int) syls.size())
+                    {
+                        if (gate->get() && v.held) v.syl = 0;
+                        else { v.active = false; break; }
+                    }
+                    v.pos = syls[(size_t) v.syl];
+                    v.segEnd = v.syl + 1 < (int) syls.size() ? syls[(size_t) v.syl + 1] : len;
+                    v.fade = 0.0f;
+                    if (v.fadeStep >= 0) v.fadeStep = 1.0f / (float) (0.002 * hostRate);
+                }
+            }
+
             const int i1 = (int) v.pos;
-            if (i1 >= len - 1) { v.active = false; break; }
+            if (! v.seq && i1 >= len - 1) { v.active = false; break; }
+            float edge = 1.0f;
+            if (v.seq)
+            {
+                const int end = juce::jmin (v.segEnd, len - 1);
+                if (i1 >= end) { v.fade += v.fadeStep; if (v.fade <= 0.0f && v.fadeStep < 0) { v.active = false; break; } continue; }
+                edge = (float) juce::jlimit (0.0, 1.0, (end - v.pos) / (v.inc * fadeLen));
+            }
             const float t = (float) (v.pos - i1);
             const float y0 = d[juce::jmax (0, i1 - 1)], y1 = d[i1], y2 = d[i1 + 1], y3 = d[juce::jmin (len - 1, i1 + 2)];
             // 4-point Hermite interpolation
@@ -442,7 +496,7 @@ void TSS1Processor::renderVoices (float* out, int numSamples)
             v.fade += v.fadeStep;
             if (v.fade >= 1.0f) { v.fade = 1.0f; if (v.fadeStep > 0) v.fadeStep = 0; }
             if (v.fade <= 0.0f && v.fadeStep < 0) { v.active = false; break; }
-            out[i] += s * v.gain * v.fade;
+            out[i] += s * v.gain * v.fade * edge;
             v.pos += v.inc;
         }
         if (! v.active) { v.clip = nullptr; continue; }   // never the last reference (see 'retired')
@@ -513,6 +567,34 @@ void TSS1Processor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
     buffer.clear();
     levelGain.setTargetValue (juce::Decibels::decibelsToGain (level->get()));
 
+    // the beat clock: the host's position while it plays, otherwise a free-running clock at its tempo
+    {
+        double bpm = 120.0;
+        bool playing = false;
+        double ppq = 0.0;
+        if (auto* ph = getPlayHead())
+            if (auto pos = ph->getPosition())
+            {
+                if (auto b = pos->getBpm()) bpm = juce::jlimit (20.0, 999.0, *b);
+                if (auto q = pos->getPpqPosition()) { ppq = *q; playing = pos->getIsPlaying(); }
+            }
+        samplesPerBeat = hostRate * 60.0 / bpm;
+        blockPpq = playing ? ppq : freePpq;
+        freePpq = blockPpq + numSamples / samplesPerBeat;
+        if (const double step = stepBeats(); step > 0)
+            for (auto& v : voices)
+                if (v.active && v.seq)
+                {
+                    v.countdown = ((double) v.nextStep * step - blockPpq) * samplesPerBeat;
+                    if (v.countdown < 0 || v.countdown > step * samplesPerBeat + 1.0)   // loop jump or tempo change
+                    {
+                        v.nextStep = (juce::int64) std::floor (blockPpq / step) + 1;
+                        v.countdown = ((double) v.nextStep * step - blockPpq) * samplesPerBeat;
+                    }
+                }
+    }
+    eventOffset = 0;
+
     if (const int pv = pendingPreview.exchange (-1); pv >= 0)
     {
         if (isMelodic()) startVoice (pv, 60, 0.8f);
@@ -527,6 +609,7 @@ void TSS1Processor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
         const auto m = meta.getMessage();
         const int t = juce::jlimit (0, numSamples, meta.samplePosition);
         if (t > pos) { renderVoices (out + pos, t - pos); pos = t; }
+        eventOffset = t;
 
         if (m.isNoteOn())
         {

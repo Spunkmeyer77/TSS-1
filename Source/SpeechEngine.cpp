@@ -1,6 +1,8 @@
 #include "SpeechEngine.h"
 #include "Presets.h"
 #include "Resources.h"
+#include <algorithm>
+#include <cstring>
 #include <espeak-ng/speak_lib.h>
 
 namespace
@@ -9,12 +11,57 @@ namespace
     constexpr const char* kDataVersion = "espeak-ng-1.52.0-r1";
 
     // eSpeak calls back with audio while espeak_Synth runs; we collect into this
+    struct Phoneme { int startSample; bool vowel, pause; };
     struct Collector
     {
         std::vector<short> samples;
         std::vector<SpeechClip::Word> words;
+        std::vector<Phoneme> phonemes;
         int sampleRate = 22050;
     };
+
+    // eSpeak phoneme mnemonics: vowels and diphthongs start with one of these (after any stress mark)
+    bool isVowelPhoneme (const char* name)
+    {
+        while (*name == '\'' || *name == ',' || *name == '%' || *name == '=') ++name;
+        return *name != 0 && std::strchr ("aeiouAEIOUV03@", *name) != nullptr;
+    }
+
+    // Splits the phrase into syllables: every word starts one, and inside a word each vowel after
+    // the first starts one at the consonant just before it ("tran-zis-t3", "hju:-m@n").
+    std::vector<int> findSyllables (const std::vector<Phoneme>& ph, const std::vector<SpeechClip::Word>& words)
+    {
+        std::vector<int> out;
+        size_t w = 0;
+        bool vowelInSyllable = false;
+        int lastConsonant = -1;
+        for (size_t i = 0; i < ph.size(); ++i)
+        {
+            const auto& p = ph[i];
+            const bool newWord = w < words.size() && p.startSample >= words[w].startSample;
+            if (newWord)
+            {
+                while (w < words.size() && p.startSample >= words[w].startSample) ++w;
+                if (p.pause) { vowelInSyllable = false; lastConsonant = -1; continue; }
+                out.push_back (p.startSample);
+                vowelInSyllable = p.vowel;
+                lastConsonant = p.vowel ? -1 : p.startSample;
+                continue;
+            }
+            if (p.pause) continue;
+            if (p.vowel)
+            {
+                if (vowelInSyllable)
+                    out.push_back (lastConsonant >= 0 ? lastConsonant : p.startSample);
+                vowelInSyllable = true;
+                lastConsonant = -1;
+            }
+            else lastConsonant = p.startSample;
+        }
+        std::sort (out.begin(), out.end());
+        out.erase (std::unique (out.begin(), out.end()), out.end());
+        return out;
+    }
     thread_local Collector* gCollector = nullptr;
 
     int synthCallback (short* wav, int numSamples, espeak_EVENT* events)
@@ -24,9 +71,17 @@ namespace
         if (wav != nullptr && numSamples > 0)
             c->samples.insert (c->samples.end(), wav, wav + numSamples);
         for (auto* e = events; e != nullptr && e->type != espeakEVENT_LIST_TERMINATED; ++e)
+        {
+            const int pos = (int) ((juce::int64) e->audio_position * c->sampleRate / 1000);
             if (e->type == espeakEVENT_WORD)
-                c->words.push_back ({ (int) ((juce::int64) e->audio_position * c->sampleRate / 1000),
-                                      juce::jmax (0, e->text_position - 1), e->length });
+                c->words.push_back ({ pos, juce::jmax (0, e->text_position - 1), e->length });
+            else if (e->type == espeakEVENT_PHONEME)
+            {
+                char name[9] = {};
+                std::memcpy (name, e->id.string, 8);
+                c->phonemes.push_back ({ pos, isVowelPhoneme (name), name[0] == '_' });
+            }
+        }
         return 0;
     }
 }
@@ -108,7 +163,7 @@ bool EspeakService::ensureReady()
     }
 
     const auto path = root.getFullPathName();
-    const int rate = espeak_Initialize (AUDIO_OUTPUT_SYNCHRONOUS, 0, path.toRawUTF8(), espeakINITIALIZE_DONT_EXIT);
+    const int rate = espeak_Initialize (AUDIO_OUTPUT_SYNCHRONOUS, 0, path.toRawUTF8(), espeakINITIALIZE_DONT_EXIT | espeakINITIALIZE_PHONEME_EVENTS);
     if (rate <= 0) { failed = true; error = "speech engine failed to start"; return false; }
     espeak_SetSynthCallback (synthCallback);
     error.clear();
@@ -160,6 +215,11 @@ SpeechClip::Ptr EspeakService::render (const juce::String& text, const VoiceSett
     auto* d = clip->audio.getWritePointer (0);
     for (int i = 0; i < n; ++i)
         d[i] = (float) c.samples[(size_t) i] * (1.0f / 32768.0f);
+    clip->syllables = findSyllables (c.phonemes, c.words);
+    clip->syllables.erase (std::remove_if (clip->syllables.begin(), clip->syllables.end(), [n] (int x) { return x >= n - 1; }),
+                           clip->syllables.end());
+    if (clip->syllables.empty()) clip->syllables.push_back (0);
+    clip->syllables.front() = 0;   // the first syllable starts with the clip
     clip->words = std::move (c.words);
     clip->f0 = measureF0 (d, n, clip->sampleRate);
     return clip;

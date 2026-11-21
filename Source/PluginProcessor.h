@@ -84,6 +84,11 @@ private:
         float gain = 1, fade = 1, fadeStep = 0;
         int slot = -1, note = -1, age = 0;
         bool active = false;
+        // beat-synced mode: one syllable per step
+        bool seq = false, held = false;
+        int syl = 0, segEnd = 0;
+        juce::int64 nextStep = 0;
+        double countdown = 0;
     };
     void startVoice (int slot, int note, float velocity);
     void stopNote (int note);
@@ -93,7 +98,7 @@ private:
     // parameters
     juce::AudioParameterChoice* voice = nullptr;
     juce::AudioParameterInt *speed = nullptr, *pitch = nullptr, *range = nullptr, *gap = nullptr, *amp = nullptr, *root = nullptr;
-    juce::AudioParameterChoice *mode = nullptr, *poly = nullptr;
+    juce::AudioParameterChoice *mode = nullptr, *poly = nullptr, *sync = nullptr;
     juce::AudioParameterBool *gate = nullptr, *fxOn = nullptr, *filterOn = nullptr;
     juce::AudioParameterFloat *intensity = nullptr, *harmonic = nullptr, *crush = nullptr, *level = nullptr;
 
@@ -121,6 +126,8 @@ private:
     std::atomic<double> uiPos { 0 };
     std::atomic<bool> uiPlaying { false };
     SpeechClip::Ptr uiClip;                              // guarded by clipLock
+    double stepBeats() const noexcept;        // length of one sync step in beats (0 = sync off)
+    double blockPpq = 0, freePpq = 0, samplesPerBeat = 22050, eventOffset = 0;
     float fxPrev = 0, fxS1 = 0, fxS2 = 0, crushHold = 0;
     int crushCount = 0;
     juce::LinearSmoothedValue<float> levelGain;

@@ -8,7 +8,6 @@
 - key_off.png / key_on.png   keycaps cut out (drawn 9-slice into the key slots)
 - rocker_off.png / rocker_on.png   the rocker switches without their labels, turned to fit the slots
 - monitor.png   the About window monitor, background removed
-- plastic.jpg   tileable case plastic
 """
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageChops
@@ -54,8 +53,21 @@ def remove_white(im, tol=20):
 
 
 # ---------------------------------------------------------------- panel
-panel = clean(load("panel.webp"))
-panel.save(OUT / "panel.jpg", quality=92, optimize=True)
+# cropped to the case (1780 x 1080 = the 890 x 540 editor at 2x); the wall around the case is
+# replaced by a dark background so only the hardware shows
+PANEL_CROP = (110, 60, 1890, 1140)
+panel = clean(load("panel.webp")).crop(PANEL_CROP)
+import numpy as np
+from scipy import ndimage
+a = np.asarray(panel).astype(int)
+beige = (a[:, :, 0] - a[:, :, 2]) > 18
+labels, _ = ndimage.label(~beige)
+edge_labels = set(np.unique(np.concatenate([labels[0], labels[-1], labels[:, 0], labels[:, -1]]))) - {0}
+wall = np.isin(labels, list(edge_labels))
+wall = ndimage.binary_opening(wall, iterations=2)
+alpha = Image.fromarray((~wall * 255).astype("uint8")).filter(ImageFilter.GaussianBlur(1.2))
+bg = Image.new("RGB", panel.size, (24, 24, 26))
+Image.composite(panel, bg, alpha).save(OUT / "panel.jpg", quality=92, optimize=True)
 
 # ---------------------------------------------------------------- knob (centre 800,800, radius 566)
 k = load("knob.webp")
@@ -86,7 +98,5 @@ for name, box in [("rocker_off", (200, 144, 786, 1006)), ("rocker_on", (1134, 14
 mon = remove_white(clean(load("monitor.webp").crop((300, 60, 1640, 1088)), 0.8))
 mon.resize((1072, 822), Image.LANCZOS).save(OUT / "monitor.png", optimize=True)
 
-# ---------------------------------------------------------------- plastic
-load("plastic.webp").resize((512, 512), Image.LANCZOS).save(OUT / "plastic.jpg", quality=88)
 
 print("assets written to", OUT)

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 # must come before project(): otherwise the macOS build targets the build machine's own macOS version
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
 
-project(TSS1 VERSION 1.0.0)
+project(TSS1 VERSION 1.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -72,7 +72,7 @@ juce_add_plugin(TSS1
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     AU_MAIN_TYPE kAudioUnitType_MusicDevice
     VST3_CATEGORIES Instrument Synth
     COPY_PLUGIN_AFTER_BUILD ${TSS_COPY_PLUGINS})

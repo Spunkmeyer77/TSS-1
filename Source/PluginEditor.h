@@ -125,7 +125,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    static constexpr int kWidth = 1000, kHeight = 600;
+    // the window shows the case only: the 890 x 540 part of the 1000 x 600 layout space starting at (55, 30)
+    static constexpr int kWidth = 890, kHeight = 540, kOffsetX = 55, kOffsetY = 30;
     void showAbout (bool instant = false) { about.open (instant); }
     void refreshNow()                     { timerCallback(); }
 
@@ -155,7 +156,6 @@ private:
     juce::OwnedArray<Rocker> rockers;
     juce::OwnedArray<SlotKey> keys;
     AboutOverlay about;
-    juce::Image plastic;
     int frame = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TSS1Editor)

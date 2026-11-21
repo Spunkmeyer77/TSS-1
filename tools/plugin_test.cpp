@@ -142,6 +142,34 @@ int main (int argc, char** argv)
         setParam ("crush", 0.0f);
     }
 
+    // ---- sync: one syllable per 1/8 at 120 BPM (no host here, so the free-running clock is used)
+    {
+        auto c = proc.getClip (0);
+        const int n = c != nullptr ? (int) c->syllables.size() : 0;
+        check (n >= 6 && n <= 12, "slot 1 split into " + juce::String (n) + " syllables");
+        setParam ("sync", 2.0f);
+        auto m = note (36);
+        run ((int) (sr * 6.0 / block), &m);
+        int last = 0;
+        for (int i = 0; i < (int) rec.size(); ++i) if (std::abs (rec[(size_t) i]) > 0.01f) last = i;
+        const double T = last / sr, step = 0.25;
+        check (T > (n - 1) * step - 0.01 && T < n * step + 0.06, "sync 1/8: phrase spread over " + juce::String (T, 2) + " s for " + juce::String (n) + " steps");
+        writeWav (outDir.getChildFile ("sync_eighths.wav"), rec, sr);
+        demo.insert (demo.end(), rec.begin(), rec.end());
+        // gate: loops while the key is held
+        setParam ("gate", 1.0f);
+        auto m2 = note (36);
+        run ((int) (sr * 5.0 / block), &m2);
+        double e = 0; const size_t from = rec.size() - (size_t) sr;
+        for (size_t i = from; i < rec.size(); ++i) e += (double) rec[i] * rec[i];
+        check (std::sqrt (e / sr) > 0.005, "sync + gate keeps looping while held");
+        juce::MidiBuffer off; off.addEvent (juce::MidiMessage::noteOff (1, 36), 0);
+        run (20, &off); run (10);
+        check (rms() < 0.0005, "sync + gate stops on release");
+        setParam ("gate", 0.0f);
+        setParam ("sync", 0.0f);
+    }
+
     // ---- melodic mode: keys set the pitch
     {
         proc.setSelectedSlot (6);   // "Electro"
@@ -201,6 +229,7 @@ int main (int argc, char** argv)
             check (f.existsAsFile(), juce::String ("snapshot ") + name);
         };
         snap ("editor.png");
+        snap ("editor@2x.png", 2.0f);
         // playing: the word and waveform on the screen, the key lit
         proc.previewSlot (1);
         run ((int) (sr * 0.75 / block));
