@@ -16,6 +16,7 @@ struct SpeechClip : juce::ReferenceCountedObject
     double f0 = 0.0;                  // measured median pitch in Hz (0 if unvoiced)
     juce::String text;
     juce::uint64 key = 0;             // what it was rendered from (text + voice settings)
+    juce::uint64 cutKey = 0;          // text + the settings that change its timing (for user cut markers)
     int note = -1;                    // melodic renders: the MIDI note it was made for
 
     int numSamples() const noexcept   { return audio.getNumSamples(); }
@@ -41,6 +42,7 @@ struct VoiceSettings
     int amplitude = 100;
 
     juce::uint64 hash (const juce::String& text) const noexcept;
+    juce::uint64 timingHash (const juce::String& text) const noexcept;
 };
 
 // eSpeak-NG is a single, process-wide engine that is not thread safe, so every plug-in

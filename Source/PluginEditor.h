@@ -122,6 +122,13 @@ private:
     PhraseEditor editor;
     std::vector<Hot> hots;
     juce::String hover, highlight, dragParam;
+    // cut markers on the waveform (Syllable mode and Sync)
+    bool editingCuts() const;
+    int cutAt (float x) const;                 // marker index near x (not the first), or -1
+    int sampleAt (float x) const;
+    juce::Rectangle<float> waveRect;
+    int waveSamples = 0, dragCut = -1, hoverCut = -1;
+    std::vector<int> dragCuts;
     float dragStartValue = 0;
     int shownSlot = -1, frame = 0;
 };

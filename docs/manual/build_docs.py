@@ -215,6 +215,23 @@ drag it up or down to move the root key.</li>
 POLY lets them overlap. SYNC is not used in this mode.</li></ul>
 <div class="tip"><b>Tip:</b> program the syllables in a MIDI clip in any order to make new words and rhythms from one phrase.</div>""")
 
+    ch("YOUR OWN SYLLABLE CUTS", f"""
+<div class="row"><img class="shot half" src="{img('cuts.jpg')}"><div class="half">
+<p>The automatic division into syllables is a starting point. You can divide a phrase any way you like, for Syllable mode
+and for Sync, in two ways.</p>
+<h4>1. Dividers in the text</h4>
+<p>Type a <span class="k">|</span> where you want a cut: <span class="k">Trans|is|tor speech</span> gives three pieces, TRANS, IS
+and TOR SPEECH; <span class="k">Hello|my friend</span> two. The | is not spoken. As soon as a phrase contains a divider, only your
+dividers are used. A divider inside a word cuts at the syllable boundary nearest to where you put it.</p></div></div>
+<h4>2. Markers on the waveform</h4>
+<p>In Syllable mode, or with SYNC on, the waveform shows every cut as a dotted marker labelled with the key that plays that piece.</p>
+<ul><li><b>Click</b> an empty spot to add a cut there; you hear the new piece straight away.</li>
+<li><b>Drag</b> a marker to move it; when you let go it settles on the quietest point nearby (so the cut does not click) and plays the piece.</li>
+<li><b>Double-click</b> a marker to remove it.</li>
+<li><span class="k">[RESET CUTS]</span> on the SLOT line (it appears once you have edited the markers) goes back to the automatic or | divisions.</li></ul>
+<p>Markers are kept per slot and saved with your project. They stay while you change pitch, range or the effects;
+editing the phrase, or changing what alters its timing (the voice or the speed), starts again from the automatic division.</p>""")
+
     ch("BEAT SYNC", """
 <p>Sync makes TSS-1 speak a phrase <b>one syllable per step</b>, locked to your DAW's tempo and grid: the robotic,
 chopped vocal of electro records. Click <span class="k">SYNC</span> on the screen and choose a step length:
@@ -361,6 +378,9 @@ Voice presets and effects after <b>DJZ-Speak</b> by MushroomFleet (Apache-2.0). 
 
 
 HISTORY = [
+    ("1.3.0", [
+        "Your own syllable cuts for Syllable mode and Sync: type | in a phrase to divide it (Trans|is|tor), or add, drag and remove cut markers on the waveform; each marker shows the key that plays its piece. Markers are saved with the project; RESET CUTS goes back to the automatic division.",
+    ]),
     ("1.2.1", [
         "The 26 voice presets now really sound different: each one uses its own eSpeak voice (Klatt synthesiser voices, Robosoft and UniRobot robots, announcer, whisper, croak and more) instead of nearly identical male and female variants, and loads its own intonation RANGE and effects settings.",
         "Melodic mode tunes more accurately on buzzy robot voices (better pitch detection).",

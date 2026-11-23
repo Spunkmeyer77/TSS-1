@@ -1,6 +1,7 @@
 #include "SpeechEngine.h"
 #include "Presets.h"
 #include "Resources.h"
+#include "Cuts.h"
 #include <algorithm>
 #include <cstring>
 #include <espeak-ng/speak_lib.h>
@@ -84,6 +85,15 @@ namespace
         }
         return 0;
     }
+}
+
+juce::uint64 VoiceSettings::timingHash (const juce::String& text) const noexcept
+{
+    // only what changes the timing of the speech: cut markers stay valid while pitch or range change
+    auto h = (juce::uint64) text.hashCode64() ^ 0x5bd1e995ull;
+    for (int v : { voice, speed, gap })
+        h = (h ^ ((juce::uint64) (juce::int64) v + 0x9e3779b9ull)) * 1099511628211ull;
+    return h;
 }
 
 juce::uint64 VoiceSettings::hash (const juce::String& text) const noexcept
@@ -189,12 +199,16 @@ SpeechClip::Ptr EspeakService::render (const juce::String& text, const VoiceSett
 {
     if (! ensureReady()) return nullptr;
 
+    // | dividers mark the user's own syllable cuts and are not spoken
+    std::vector<int> dividers;
+    const auto spoken = cuts::stripDividers (text, &dividers);
+
     Collector c;
     {
         const juce::ScopedLock sl (lock);
         applyVoice (s, pitchOverride >= 0 ? pitchOverride : s.pitch);
         gCollector = &c;
-        const auto utf8 = text.toUTF8();
+        const auto utf8 = spoken.toUTF8();
         espeak_Synth (utf8.getAddress(), std::strlen (utf8.getAddress()) + 1, 0, POS_CHARACTER, 0,
                       espeakCHARS_UTF8, nullptr, nullptr);
         espeak_Synchronize();
@@ -202,9 +216,10 @@ SpeechClip::Ptr EspeakService::render (const juce::String& text, const VoiceSett
     }
 
     SpeechClip::Ptr clip = new SpeechClip();
-    clip->text = text;
+    clip->text = spoken;
     clip->sampleRate = c.sampleRate;
     clip->key = s.hash (text);
+    clip->cutKey = s.timingHash (text);
 
     // trim the silence eSpeak leaves at the end (keep a short tail)
     int n = (int) c.samples.size();
@@ -222,6 +237,7 @@ SpeechClip::Ptr EspeakService::render (const juce::String& text, const VoiceSett
     if (clip->syllables.empty()) clip->syllables.push_back (0);
     clip->syllables.front() = 0;   // the first syllable starts with the clip
     clip->words = std::move (c.words);
+    if (! dividers.empty()) clip->syllables = cuts::fromDividers (*clip, dividers);
     clip->f0 = measureF0 (d, n, clip->sampleRate);
     return clip;
 }

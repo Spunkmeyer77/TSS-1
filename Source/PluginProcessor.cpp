@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "Cuts.h"
 
 namespace
 {
@@ -154,6 +155,44 @@ void TSS1Processor::loadVoicePreset (int index)
     set ("fx", 1.0f);
 }
 
+std::vector<int> TSS1Processor::getCuts (int slot, bool* custom) const
+{
+    slot = juce::jlimit (0, kNumSlots - 1, slot);
+    const juce::SpinLock::ScopedLockType sl (clipLock);
+    if (custom != nullptr) *custom = false;
+    auto& clip = slotClips[slot];
+    if (clip == nullptr) return {};
+    if (cutLists[slot] != nullptr && cutLists[slot]->key == clip->cutKey)
+    {
+        if (custom != nullptr) *custom = true;
+        return cutLists[slot]->cuts;
+    }
+    return clip->syllables;
+}
+
+void TSS1Processor::setCuts (int slot, std::vector<int> c)
+{
+    slot = juce::jlimit (0, kNumSlots - 1, slot);
+    CutList::Ptr list = new CutList();
+    {
+        const juce::SpinLock::ScopedLockType sl (clipLock);
+        auto& clip = slotClips[slot];
+        if (clip == nullptr) return;
+        list->key = clip->cutKey;
+        list->cuts = cuts::tidy (std::move (c), clip->numSamples(), (int) (clip->sampleRate * 0.02));
+        if (cutLists[slot] != nullptr) retiredCuts.add (cutLists[slot]);
+        cutLists[slot] = list;
+    }
+}
+
+void TSS1Processor::resetCuts (int slot)
+{
+    slot = juce::jlimit (0, kNumSlots - 1, slot);
+    const juce::SpinLock::ScopedLockType sl (clipLock);
+    if (cutLists[slot] != nullptr) retiredCuts.add (cutLists[slot]);
+    cutLists[slot] = nullptr;
+}
+
 TSS1Processor::SlotStatus TSS1Processor::getSlotStatus (int slot) const
 {
     const auto text = getPhrase (slot).trim();
@@ -213,6 +252,9 @@ void RenderThread::run()
                 for (int i = owner.retired.size(); --i >= 0;)
                     if (owner.retired.getObjectPointerUnchecked (i)->getReferenceCount() == 1)
                         toFree.add (owner.retired.removeAndReturn (i));
+                for (int i = owner.retiredCuts.size(); --i >= 0;)
+                    if (owner.retiredCuts.getObjectPointerUnchecked (i)->getReferenceCount() == 1)
+                        owner.retiredCuts.remove (i);   // small, and never the audio thread's last reference
             }
         }   // freed here, outside the lock
 
@@ -394,7 +436,13 @@ void TSS1Processor::startVoice (int slot, int note, float velocity, int syllable
         }
     }
     if (clip == nullptr || clip->numSamples() < 2) return;
-    if (syllable >= (int) clip->syllables.size()) return;   // syllable mode: past the last syllable
+    CutList::Ptr userCuts;
+    {
+        const juce::SpinLock::ScopedLockType sl (clipLock);
+        if (cutLists[slot] != nullptr && cutLists[slot]->key == clip->cutKey) userCuts = cutLists[slot];
+    }
+    const auto& syllables = userCuts != nullptr ? userCuts->cuts : clip->syllables;
+    if (syllable >= (int) syllables.size()) return;   // syllable mode: past the last syllable
     if (melodic && renderer.isThreadRunning()) renderer.notify();
 
     // mono: the new note cuts the others with a short fade
@@ -424,24 +472,25 @@ void TSS1Processor::startVoice (int slot, int note, float velocity, int syllable
     target->held = true;
     target->seq = false;
     target->chop = false;
+    target->cuts = userCuts;
 
     if (syllable >= 0)
     {
         // syllable mode: this key says one syllable of the phrase
         target->chop = true;
-        target->pos = clip->syllables[(size_t) syllable];
-        target->segEnd = syllable + 1 < (int) clip->syllables.size() ? clip->syllables[(size_t) syllable + 1] : clip->numSamples();
+        target->pos = syllables[(size_t) syllable];
+        target->segEnd = syllable + 1 < (int) syllables.size() ? syllables[(size_t) syllable + 1] : clip->numSamples();
     }
     else
 
-    if (const double step = stepBeats(); step > 0 && ! clip->syllables.empty())
+    if (const double step = stepBeats(); step > 0 && ! syllables.empty())
     {
         // speak the first syllable now and each next one on the following steps of the host's grid
         const double notePpq = blockPpq + eventOffset / samplesPerBeat;
         target->seq = true;
         target->syl = 0;
-        target->pos = clip->syllables[0];
-        target->segEnd = clip->syllables.size() > 1 ? clip->syllables[1] : clip->numSamples();
+        target->pos = syllables[0];
+        target->segEnd = syllables.size() > 1 ? syllables[1] : clip->numSamples();
         target->nextStep = (juce::int64) std::floor (notePpq / step + 1.0e-4) + 1;
         target->countdown = ((double) target->nextStep * step - notePpq) * samplesPerBeat;
     }
@@ -470,7 +519,7 @@ void TSS1Processor::renderVoices (float* out, int numSamples)
         if (! v.active) continue;
         const float* d = v.clip->audio.getReadPointer (0);
         const int len = v.clip->numSamples();
-        const auto& syls = v.clip->syllables;
+        const auto& syls = v.cuts != nullptr ? v.cuts->cuts : v.clip->syllables;
         const double step = stepBeats();
         const double fadeLen = 0.004 * hostRate;     // syllable edges
         for (int i = 0; i < numSamples; ++i)
@@ -522,7 +571,7 @@ void TSS1Processor::renderVoices (float* out, int numSamples)
             out[i] += s * v.gain * v.fade * edge;
             v.pos += v.inc;
         }
-        if (! v.active) { v.clip = nullptr; continue; }   // never the last reference (see 'retired')
+        if (! v.active) { v.clip = nullptr; v.cuts = nullptr; continue; }   // never the last reference (see 'retired')
         if (v.age < newestAge) { newestAge = v.age; newest = &v; }
     }
     if (newest != nullptr) { uiPos = newest->pos; uiPlaying = true; }
@@ -618,6 +667,9 @@ void TSS1Processor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBu
     }
     eventOffset = 0;
 
+    if (const int ps = pendingSyllable.exchange (-1); ps >= 0)
+        startVoice (ps / 1024, root->get() + ps % 1024, 0.8f, ps % 1024);
+
     if (const int pv = pendingPreview.exchange (-1); pv >= 0)
     {
         if (isMelodic()) startVoice (pv, 60, 0.8f);
@@ -670,6 +722,18 @@ void TSS1Processor::getStateInformation (juce::MemoryBlock& dest)
             ph.appendChild (juce::ValueTree ("P").setProperty ("i", i, nullptr).setProperty ("t", phrases[i], nullptr), nullptr);
     }
     ph.setProperty ("selected", selectedSlot.load(), nullptr);
+    {
+        const juce::SpinLock::ScopedLockType sl (clipLock);
+        for (int i = 0; i < kNumSlots; ++i)
+            if (auto& cl = cutLists[i])
+            {
+                juce::StringArray v;
+                for (int x : cl->cuts) v.add (juce::String (x));
+                ph.appendChild (juce::ValueTree ("CUTS").setProperty ("i", i, nullptr)
+                                                        .setProperty ("k", juce::String::toHexString ((juce::int64) cl->key), nullptr)
+                                                        .setProperty ("c", v.joinIntoString (","), nullptr), nullptr);
+            }
+    }
     state.removeChild (state.getChildWithName ("PHRASES"), nullptr);
     state.appendChild (ph, nullptr);
     state.setProperty ("version", JucePlugin_VersionString, nullptr);
@@ -690,7 +754,18 @@ void TSS1Processor::setStateInformation (const void* data, int size)
             for (auto c : ph)
             {
                 const int i = c.getProperty ("i", -1);
-                if (i >= 0 && i < kNumSlots) phrases[i] = c.getProperty ("t").toString();
+                if (i < 0 || i >= kNumSlots) continue;
+                if (c.hasType ("CUTS"))
+                {
+                    CutList::Ptr cl = new CutList();
+                    cl->key = (juce::uint64) c.getProperty ("k").toString().getHexValue64();
+                    for (auto& t : juce::StringArray::fromTokens (c.getProperty ("c").toString(), ",", ""))
+                        cl->cuts.push_back (t.getIntValue());
+                    const juce::SpinLock::ScopedLockType sl2 (clipLock);
+                    if (cutLists[i] != nullptr) retiredCuts.add (cutLists[i]);
+                    cutLists[i] = cl;
+                }
+                else phrases[i] = c.getProperty ("t").toString();
             }
         }
         selectedSlot = juce::jlimit (0, kNumSlots - 1, (int) ph.getProperty ("selected", 0));

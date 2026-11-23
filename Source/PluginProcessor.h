@@ -5,6 +5,14 @@
 
 class TSS1Processor;
 
+// the user's own syllable cuts for one slot (start samples), valid for clips with the same cutKey
+struct CutList : juce::ReferenceCountedObject
+{
+    using Ptr = juce::ReferenceCountedObjectPtr<CutList>;
+    juce::uint64 key = 0;
+    std::vector<int> cuts;
+};
+
 // Renders phrases in the background so that notes play instantly.
 class RenderThread : public juce::Thread
 {
@@ -59,6 +67,12 @@ public:
     void loadVoicePreset (int index);
     void previewSlot (int slot) noexcept                  { pendingPreview.store (slot); }
 
+    // syllable cuts of a slot: the user's markers if there are any, otherwise the automatic (or | divider) ones
+    std::vector<int> getCuts (int slot, bool* custom = nullptr) const;
+    void setCuts (int slot, std::vector<int> cuts);      // message thread
+    void resetCuts (int slot);
+    void previewSyllable (int slot, int index) noexcept   { pendingSyllable.store (slot * 1024 + index); }
+
     enum class SlotStatus { empty, rendering, ready };
     SlotStatus getSlotStatus (int slot) const;
     SpeechClip::Ptr getClip (int slot) const;            // the current render of a slot (any thread but audio)
@@ -87,6 +101,7 @@ private:
         bool active = false;
         // beat-synced mode: one syllable per step
         bool seq = false, held = false, chop = false;   // chop: plays one syllable only
+        CutList::Ptr cuts;                              // user cuts in use (else the clip's syllables)
         int syl = 0, segEnd = 0;
         juce::int64 nextStep = 0;
         double countdown = 0;
@@ -107,7 +122,7 @@ private:
     mutable juce::CriticalSection phraseLock;
     juce::String phrases[kNumSlots];
     std::atomic<int> selectedSlot { 0 };
-    std::atomic<int> pendingPreview { -1 };
+    std::atomic<int> pendingPreview { -1 }, pendingSyllable { -1 };
     std::atomic<juce::uint32> changeCounter { 1 };
     std::atomic<bool> busy { false };
 
@@ -116,6 +131,8 @@ private:
     SpeechClip::Ptr melodicClips[128];                   // renders of the selected slot per MIDI note
     juce::uint64 melodicKey = 0;
     juce::ReferenceCountedArray<SpeechClip> retired;     // freed on the render thread, never the audio thread
+    CutList::Ptr cutLists[kNumSlots];                    // guarded by clipLock
+    juce::ReferenceCountedArray<CutList> retiredCuts;
 
     RenderThread renderer { *this };
 

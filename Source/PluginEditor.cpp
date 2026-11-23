@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "Resources.h"
+#include "Cuts.h"
 
 using namespace juce;
 
@@ -391,7 +392,12 @@ void CrtScreen::paint (Graphics& g)
 
     // slot line
     x = text ("> SLOT " + String (sel + 1).paddedLeft ('0', 2), L, 78, kGreenMid);
-    if (! melodic && ! syllableMode) text ("  KEY " + TSS1Processor::noteName ((int) val ("root") + sel), x, 78, kGreenMid);
+    if (! melodic && ! syllableMode) x = text ("  KEY " + TSS1Processor::noteName ((int) val ("root") + sel), x, 78, kGreenMid);
+    {
+        bool custom = false;
+        proc.getCuts (sel, &custom);
+        if (custom && editingCuts()) text ("  [RESET CUTS]", x, 78, kGreen, "resetCuts");
+    }
     {
         const auto st = proc.getSlotStatus (sel);
         const String s = st == TSS1Processor::SlotStatus::ready ? "READY" : st == TSS1Processor::SlotStatus::empty ? "EMPTY" : "RENDERING";
@@ -426,10 +432,13 @@ void CrtScreen::paint (Graphics& g)
     }
     else
     {
-        drawGlow (g, "SHIFT-CLICK A KEY OR PRESS RETURN TO PREVIEW", word, kGreenDim.brighter (0.2f), Justification::centred, 10.0f);
+        drawGlow (g, editingCuts() ? "CLICK: ADD CUT   DRAG: MOVE   DOUBLE-CLICK: REMOVE" : "SHIFT-CLICK A KEY OR PRESS RETURN TO PREVIEW",
+                  word, kGreenDim.brighter (0.2f), Justification::centred, 10.0f);
     }
 
     const auto wave = Rectangle<float> (L, 178.0f, W, 60.0f);
+    waveRect = wave;
+    waveSamples = clip != nullptr ? clip->numSamples() : 0;
     g.setColour (kGreenDim.withAlpha (0.35f));
     g.fillRect (wave.getX(), wave.getCentreY(), wave.getWidth(), 1.0f);
     if (clip != nullptr && clip->numSamples() > 1)
@@ -449,6 +458,23 @@ void CrtScreen::paint (Graphics& g)
             const bool played = playFrac >= 0 && (double) c / cols <= playFrac;
             g.setColour (played ? kGreen : (showPlaying ? kGreenDim : kGreenMid.withAlpha (0.8f)));
             g.fillRect (wave.getX() + (float) c, wave.getCentreY() - hi * h, 1.0f, jmax (1.0f, (hi - lo) * h));
+        }
+        if (editingCuts())
+        {
+            // the cut markers, each labelled with the key that plays it
+            bool custom = false;
+            const auto cutsNow = dragCut >= 0 ? dragCuts : proc.getCuts (sel, &custom);
+            const int rn = (int) val ("root");
+            for (size_t k = 0; k < cutsNow.size(); ++k)
+            {
+                const float cx = wave.getX() + (float) ((double) cutsNow[k] / n * cols);
+                const bool hot = (int) k == hoverCut || (int) k == dragCut;
+                g.setColour ((hot ? Colour (0xffffffff) : kGreen).withAlpha (k == 0 ? 0.5f : 0.95f));
+                for (float yy = wave.getY() - 2; yy < wave.getBottom() + 2; yy += 3.0f) g.fillRect (cx, yy, hot ? 2.0f : 1.0f, 2.0f);
+                g.setFont (mono (8.5f, true));
+                g.setColour (kGreen);
+                g.drawText (TSS1Processor::noteName (rn + (int) k), Rectangle<float> (cx + 2, wave.getY() - 4, 34, 10), Justification::centredLeft, false);
+            }
         }
         if (playFrac >= 0)
         {
@@ -515,6 +541,7 @@ void CrtScreen::doAction (const String& a)
         p->endChangeGesture();
     }
     else if (a == "poly") toggle ("poly");
+    else if (a == "resetCuts") proc.resetCuts (proc.getSelectedSlot());
     else if (a == "gate") toggle ("gate");
     else if (a == "sync")
     {
@@ -545,10 +572,55 @@ void CrtScreen::doAction (const String& a)
     }
 }
 
+bool CrtScreen::editingCuts() const
+{
+    return proc.isSyllableMode() || proc.apvts.getRawParameterValue ("sync")->load() > 0.5f;
+}
+
+int CrtScreen::sampleAt (float x) const
+{
+    return jlimit (0, jmax (0, waveSamples - 1), (int) ((x - waveRect.getX()) / waveRect.getWidth() * waveSamples));
+}
+
+int CrtScreen::cutAt (float x) const
+{
+    if (waveSamples <= 0) return -1;
+    const auto c = proc.getCuts (proc.getSelectedSlot());
+    int best = -1; float bestD = 5.0f;
+    for (size_t k = 1; k < c.size(); ++k)
+    {
+        const float cx = waveRect.getX() + (float) ((double) c[k] / waveSamples * waveRect.getWidth());
+        if (std::abs (cx - x) < bestD) { bestD = std::abs (cx - x); best = (int) k; }
+    }
+    return best;
+}
+
 void CrtScreen::mouseDown (const MouseEvent& e)
 {
     unfocusAllComponents();
     commitText();
+    if (editingCuts() && waveSamples > 0 && waveRect.expanded (0, 6).contains (e.position))
+    {
+        const int sel = proc.getSelectedSlot();
+        auto c = proc.getCuts (sel);
+        const int k = cutAt (e.position.x);
+        if (k > 0 && e.getNumberOfClicks() > 1)          // double-click: remove
+        {
+            c.erase (c.begin() + k);
+            proc.setCuts (sel, c);
+            return;
+        }
+        if (k > 0) { dragCut = k; dragCuts = c; return; }  // drag an existing marker
+        // add a cut at the quietest point near the click, and play the new piece
+        auto clip = proc.getClip (sel);
+        if (clip == nullptr) return;
+        const int pos = cuts::snapToQuiet (clip->audio.getReadPointer (0), clip->numSamples(), sampleAt (e.position.x), (int) (clip->sampleRate * 0.015));
+        c.push_back (pos);
+        proc.setCuts (sel, c);
+        const auto now = proc.getCuts (sel);
+        for (size_t i = 0; i < now.size(); ++i) if (now[i] == pos) proc.previewSyllable (sel, (int) i);
+        return;
+    }
     const auto* h = hotAt (e.position);
     if (h == nullptr) return;
     static const StringArray dragIds { "speed", "pitch", "range", "gap", "amp", "root", "level" };
@@ -569,6 +641,14 @@ void CrtScreen::mouseDown (const MouseEvent& e)
 
 void CrtScreen::mouseDrag (const MouseEvent& e)
 {
+    if (dragCut > 0 && dragCut < (int) dragCuts.size())
+    {
+        const int lo = dragCuts[(size_t) dragCut - 1] + 200;
+        const int hi = dragCut + 1 < (int) dragCuts.size() ? dragCuts[(size_t) dragCut + 1] - 200 : waveSamples - 200;
+        dragCuts[(size_t) dragCut] = jlimit (lo, jmax (lo, hi), sampleAt (e.position.x));
+        repaint();
+        return;
+    }
     if (dragParam.isEmpty()) return;
     auto* p = proc.apvts.getParameter (dragParam);
     const float perPixel = dragParam == "root" ? 0.2f : dragParam == "level" ? 0.1f
@@ -579,12 +659,34 @@ void CrtScreen::mouseDrag (const MouseEvent& e)
 
 void CrtScreen::mouseUp (const MouseEvent&)
 {
+    if (dragCut > 0)
+    {
+        const int sel = proc.getSelectedSlot();
+        if (auto clip = proc.getClip (sel))
+        {
+            dragCuts[(size_t) dragCut] = cuts::snapToQuiet (clip->audio.getReadPointer (0), clip->numSamples(), dragCuts[(size_t) dragCut], (int) (clip->sampleRate * 0.01));
+            proc.setCuts (sel, dragCuts);
+            const auto now = proc.getCuts (sel);
+            for (size_t i = 0; i < now.size(); ++i) if (now[i] == dragCuts[(size_t) dragCut]) proc.previewSyllable (sel, (int) i);
+        }
+        dragCut = -1;
+        dragCuts.clear();
+        return;
+    }
     if (dragParam.isNotEmpty()) proc.apvts.getParameter (dragParam)->endChangeGesture();
     dragParam.clear();
 }
 
 void CrtScreen::mouseMove (const MouseEvent& e)
 {
+    if (editingCuts() && waveRect.expanded (0, 6).contains (e.position))
+    {
+        hoverCut = cutAt (e.position.x);
+        setMouseCursor (hoverCut > 0 ? MouseCursor::LeftRightResizeCursor : MouseCursor::CrosshairCursor);
+        hover.clear();
+        return;
+    }
+    hoverCut = -1;
     const auto* h = hotAt (e.position);
     const String now = h != nullptr ? h->action : String();
     setMouseCursor (h != nullptr ? (StringArray { "speed", "pitch", "range", "gap", "amp", "root", "level" }.contains (now)
