@@ -84,7 +84,8 @@ namespace cuts
                     const int target = wd.startSample + (int) (f * (end - wd.startSample));
                     int best = -1;
                     for (int s : clip.syllables)
-                        if (s > wd.startSample && s < end && (best < 0 || std::abs (s - target) < std::abs (best - target))) best = s;
+                        if (s > wd.startSample && s < end && std::find (out.begin(), out.end(), s) == out.end()
+                            && (best < 0 || std::abs (s - target) < std::abs (best - target))) best = s;
                     // a syllable boundary near the spelling position, otherwise the quietest point nearby
                     if (best < 0 || std::abs (best - target) > (end - wd.startSample) / 3) best = snapToQuiet (x, n, target, radius);
                     out.push_back (best);
