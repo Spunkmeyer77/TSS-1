@@ -220,12 +220,12 @@ int main (int argc, char** argv)
     {
         const auto old = proc.getPhrase (0);
         proc.setSelectedSlot (0);
-        proc.setPhrase (0, "Trans|is|tor speech");
+        proc.setPhrase (0, "Trans/is/tor speech");
         juce::Thread::sleep (300);
         waitFor (allReady, 120000);
         auto c = proc.getClip (0);
-        check (c != nullptr && c->syllables.size() == 3, "| dividers: 3 pieces (" + juce::String (c ? (int) c->syllables.size() : -1) + ")");
-        check (c != nullptr && ! c->text.containsChar ('|'), "dividers are not spoken");
+        check (c != nullptr && c->syllables.size() == 3, "/ dividers: 3 pieces (" + juce::String (c ? (int) c->syllables.size() : -1) + ")");
+        check (c != nullptr && ! c->text.containsChar ('/'), "dividers are not spoken");
         const int n = c != nullptr ? c->numSamples() : 0;
         proc.setCuts (0, { 0, n / 4, n / 2, 3 * n / 4 });
         bool custom = false;
@@ -246,7 +246,7 @@ int main (int argc, char** argv)
         bool c2 = false;
         check (other.getCuts (0, &c2).size() == 4 && c2, "markers saved with the project");
         proc.resetCuts (0);
-        check (proc.getCuts (0, &custom).size() == 3 && ! custom, "reset goes back to the | divisions");
+        check (proc.getCuts (0, &custom).size() == 3 && ! custom, "reset goes back to the / divisions");
         setParam ("mode", 0.0f);
         proc.setPhrase (0, old);
         juce::Thread::sleep (300);

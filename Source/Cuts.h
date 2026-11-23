@@ -5,13 +5,13 @@
 
 // User divisions of a phrase for the Syllable and Sync modes.
 //
-// In the text: "Trans|is|tor speech" - every | is a cut and is not spoken. With dividers in a phrase,
+// In the text: "Trans/is/tor speech" - every / (or |) is a cut and is not spoken. With dividers in a phrase,
 // only the user's cuts are used. On the screen: cut markers can be added, moved and removed; those
 // edits are kept per slot as a CutList and override the automatic or text divisions.
 
 namespace cuts
 {
-    // removes the | dividers; positions get the index in the cleaned text where each one was
+    // removes the / (and |) dividers; positions get the index in the cleaned text where each one was
     inline juce::String stripDividers (const juce::String& text, std::vector<int>* positions = nullptr)
     {
         juce::String out;
@@ -19,7 +19,7 @@ namespace cuts
         for (int i = 0; i < text.length(); ++i)
         {
             const auto c = text[i];
-            if (c == '|') { if (positions != nullptr) positions->push_back (out.length()); }
+            if (c == '/' || c == '|') { if (positions != nullptr) positions->push_back (out.length()); }
             else out += juce::String::charToString (c);
         }
         return out;
